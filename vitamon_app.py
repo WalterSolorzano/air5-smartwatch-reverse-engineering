@@ -1,8 +1,10 @@
 """
-CYBER-TELEMETRY HUD — Smartwatch Air5 BLE Compact Glanceable Edition
-- Tipografía y métricas de alta legibilidad (3 mini-pills de lectura instantánea, cero texto diminuto amontonado).
-- Rueda orbital de movimiento calmado, sutil y cadencioso (16s por revolución).
-- Osciloscopio ECG continuo a 60 FPS.
+CYBER-TELEMETRY HUD — 300 Millisecond Glanceable Edition (310x170 px)
+Diseño basado en percepción periférica y cero lectura de texto:
+- Número HERO gigante (30pt bold) para el pulso cardíaco.
+- Iconografía pura de instrumentación: ⏱ 59m | 🫁 98% | 👟 2.9k | ⚡ 16% | 🛡
+- Código cromático dinámico: Cambio automático de Cyan/Verde a Ámbar (+45m) y micro-glitch (+60m).
+- Efecto Flatline rojo en desconexión y cuadrícula militar con parallax en movimiento.
 """
 import sys
 import os
@@ -16,35 +18,31 @@ from datetime import datetime
 import tkinter as tk
 import customtkinter as ctk
 
-# ── Configuracion Base de CustomTkinter ──────────────────────────────────
+# ── Configuración Base CustomTkinter ─────────────────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 MAC_ADDR = "81:0A:B7:00:1D:BC"
 
-# Paleta Industrial de Alto Contraste y Legibilidad
-HUD_PALETTE = {
-    "bg_base": "#0C0F12",
-    "bg_card": "#11161B",
-    "bg_pill": "#151C24",
-    "border_normal": "#1C242D",
-    "border_pill": "#243242",
+# Paleta de Alto Impacto Periférico
+PALETTE = {
+    "bg_base": "#0A0D10",
+    "bg_card": "#0F141A",
+    "bg_pill": "#141B22",
+    "border_normal": "#1B242D",
     "border_flash": "#00E5FF",
-    "border_alert": "#FF9900",
-    "text_hero": "#F0F6FC",
-    "text_sub": "#919EAB",
-    "text_muted": "#637381",
+    "border_amber": "#FF9900",
+    "border_red": "#FF3344",
     "crt_green": "#00FF66",
     "crt_cyan": "#00E5FF",
-    "amber_alert": "#FF9900",
-    "amber_bg": "#2A1808",
-    "amber_border": "#5E370E",
-    "red_alarm": "#FF4A5A",
-    "ecg_grid": "#131C24",
-    "ecg_trace": "#00FF66"
+    "amber": "#FF9900",
+    "red_alarm": "#FF3344",
+    "text_hero": "#FFFFFF",
+    "text_sub": "#8B949E",
+    "ecg_grid": "#141C24"
 }
 
-# ── Hilo de Conexión BLE WinRT Asíncrono ──────────────────────────────────
+# ── Hilo BLE WinRT Asíncrono ─────────────────────────────────────────────
 class BLETelemetryBridge(threading.Thread):
     def __init__(self, data_queue, cmd_queue, mac_addr=MAC_ADDR):
         super().__init__(daemon=True)
@@ -78,17 +76,17 @@ class BLETelemetryBridge(threading.Thread):
         mac_int = int(self.mac_addr.replace(":", ""), 16)
 
         while self.running:
-            self.data_queue.put({"type": "status", "status": "scan", "msg": "BUSCANDO"})
+            self.data_queue.put({"type": "status", "status": "scan"})
             try:
                 device = await BluetoothLEDevice.from_bluetooth_address_async(mac_int)
                 if not device:
-                    self.data_queue.put({"type": "status", "status": "offline", "msg": "DESCONECTADO"})
+                    self.data_queue.put({"type": "status", "status": "offline"})
                     await asyncio.sleep(4)
                     continue
 
                 services_res = await device.get_gatt_services_async()
                 if services_res.status != GattCommunicationStatus.SUCCESS:
-                    self.data_queue.put({"type": "status", "status": "offline", "msg": "GATT_ERR"})
+                    self.data_queue.put({"type": "status", "status": "offline"})
                     device.close()
                     await asyncio.sleep(4)
                     continue
@@ -106,7 +104,7 @@ class BLETelemetryBridge(threading.Thread):
                         if h == 0x0019: notify2 = ch
 
                 if not write1 or not notify1:
-                    self.data_queue.put({"type": "status", "status": "offline", "msg": "SIN_CANALES"})
+                    self.data_queue.put({"type": "status", "status": "offline"})
                     device.close()
                     await asyncio.sleep(4)
                     continue
@@ -122,7 +120,7 @@ class BLETelemetryBridge(threading.Thread):
                     if cmd == 0xA2 and len(data) >= 2:
                         self.data_queue.put({"type": "battery", "value": int(data[1]), "t": t_rx})
 
-                    # Frecuencia cardíaca en vivo (E5)
+                    # Frecuencia cardíaca (E5)
                     elif cmd == 0xE5 and len(data) >= 4 and data[1] == 0x11:
                         bpm = data[3]
                         if 35 <= bpm <= 220:
@@ -134,13 +132,7 @@ class BLETelemetryBridge(threading.Thread):
                         calories = struct.unpack_from("<H", data, 5)[0]
                         distance = struct.unpack_from("<H", data, 7)[0]
                         if steps != 65535:
-                            self.data_queue.put({
-                                "type": "activity",
-                                "steps": steps,
-                                "cal": calories,
-                                "dist": distance,
-                                "t": t_rx
-                            })
+                            self.data_queue.put({"type": "activity", "steps": steps, "cal": calories, "t": t_rx})
 
                     # Incremento instantáneo (B1)
                     elif cmd == 0xB1:
@@ -177,7 +169,7 @@ class BLETelemetryBridge(threading.Thread):
                     except: await w.write_value_async(buf, GattWriteOption.WRITE_WITHOUT_RESPONSE)
                     await asyncio.sleep(0.08)
 
-                # Handshake Air5
+                # Handshake
                 await send_cmd(write1, "0808442a01243943756ffffed921005f784be1dc")
                 if write2:
                     await send_cmd(write2, "00f4000000000000000000000000000000000402")
@@ -185,7 +177,7 @@ class BLETelemetryBridge(threading.Thread):
                 # Antispam sedentarismo
                 await send_cmd(write1, "d1ff64")
                 await send_cmd(write1, "d7160017000000")
-                self.data_queue.put({"type": "antispam", "msg": "ANTISPAM_ACTIVE"})
+                self.data_queue.put({"type": "antispam", "msg": "ACTIVE"})
 
                 # Sync hora
                 now = datetime.now()
@@ -198,7 +190,7 @@ class BLETelemetryBridge(threading.Thread):
                 if write2:
                     await send_cmd(write2, "34fa")
 
-                self.data_queue.put({"type": "status", "status": "online", "msg": "ONLINE"})
+                self.data_queue.put({"type": "status", "status": "online"})
 
                 last_poll = time.time()
                 while self.running:
@@ -209,10 +201,6 @@ class BLETelemetryBridge(threading.Thread):
                             if act == "silence":
                                 await send_cmd(write1, "d1ff64")
                                 await send_cmd(write1, "d7160017000000")
-                            elif act == "sync_time":
-                                n = datetime.now()
-                                th = f"a3{n.year:04x}{n.month:02x}{n.day:02x}{n.hour:02x}{n.minute:02x}{n.second:02x}"
-                                await send_cmd(write1, th)
                     except queue.Empty:
                         pass
 
@@ -223,30 +211,29 @@ class BLETelemetryBridge(threading.Thread):
 
                     await asyncio.sleep(0.3)
 
-            except Exception as e:
-                self.data_queue.put({"type": "status", "status": "offline", "msg": "RETRY"})
+            except Exception:
+                self.data_queue.put({"type": "status", "status": "offline"})
                 await asyncio.sleep(4)
 
 
-# ── Generador Matemático de Onda ECG / PPG Sintética Interpolada ────────
+# ── Motor ECG Fisiológico con Soporte de Flatline & Parallax ─────────────
 class SyntheticECGGenerator:
-    """Motor continuo a 60 FPS que genera la forma de onda QRS fisiológica interpolada."""
-    def __init__(self, buffer_len=140):
+    def __init__(self, buffer_len=130):
         self.buffer_len = buffer_len
         self.buffer = [0.0] * buffer_len
         self.current_bpm = 72.0
         self.target_bpm = 72.0
         self.phase = 0.0
-        self.last_update = time.perf_counter()
         self.last_packet_time = time.perf_counter()
+        self.is_flatline = False
+        self.parallax_offset = 0.0
 
     def set_target_bpm(self, bpm):
         self.target_bpm = max(40.0, min(190.0, float(bpm)))
         self.last_packet_time = time.perf_counter()
 
-    def get_ecg_sample(self, theta):
-        """Calcula el voltaje relativo del complejo P-Q-R-S-T en función de la fase [0, 1)."""
-        t = theta % 1.0
+    def get_qrs_sample(self, t):
+        t = t % 1.0
         if t < 0.12: return 0.0
         elif t < 0.20: return 0.18 * math.sin(((t - 0.12) / 0.08) * math.pi)
         elif t < 0.24: return 0.0
@@ -257,85 +244,93 @@ class SyntheticECGGenerator:
         elif t < 0.68: return 0.26 * math.sin(((t - 0.46) / 0.22) * math.pi)
         else: return 0.0
 
-    def step(self, dt):
+    def step(self, dt, walking_speed=0.0):
+        # Transición suave de BPM
         self.current_bpm += (self.target_bpm - self.current_bpm) * 0.06
         freq = self.current_bpm / 60.0
         self.phase = (self.phase + (freq * dt)) % 1.0
 
+        # Parallax del fondo de la cuadrícula si está caminando
+        self.parallax_offset = (self.parallax_offset + (walking_speed * dt * 40.0)) % 20.0
+
+        # Detección de Flatline (>10s sin paquetes BLE)
         time_since_pkt = time.perf_counter() - self.last_packet_time
-        decay = 1.0 if time_since_pkt < 5.0 else max(0.05, math.exp(-(time_since_pkt - 5.0) * 0.4))
-        noise = (random.random() - 0.5) * 0.03
-        val = (self.get_ecg_sample(self.phase) * decay) + noise
+        if time_since_pkt > 10.0:
+            self.is_flatline = True
+            val = (random.random() - 0.5) * 0.04  # Ruido basal plano
+        else:
+            self.is_flatline = False
+            noise = (random.random() - 0.5) * 0.02
+            val = self.get_qrs_sample(self.phase) + noise
 
         self.buffer.pop(0)
         self.buffer.append(val)
-        return self.buffer, self.current_bpm
+        return self.buffer, self.current_bpm, self.is_flatline
 
 
-# ── Renderizador de Halo con Movimiento Suave y Calmado ──────────────────
+# ── Halo Reactor Orgánico Calmado (16s por revolución) ───────────────────
 class IndustrialHaloCore:
-    """Núcleo con rotación suave, lenta y elegante (16s por revolución)."""
-    def __init__(self, canvas, cx=38, cy=40):
+    def __init__(self, canvas, cx=32, cy=32):
         self.canvas = canvas
         self.cx = cx
         self.cy = cy
-        self.bpm = 72.0
-        self.num_particles = 12
+        self.num_particles = 10
 
-        # Pista y Halo Central
-        self.id_base_track = canvas.create_oval(cx-28, cy-28, cx+28, cy+28, outline="#18232D", width=1.5)
-        self.id_core_body = canvas.create_oval(cx-14, cy-14, cx+14, cy+14, fill="#0F171F", outline="#00E5FF", width=1.5)
-        self.id_core_center = canvas.create_oval(cx-6, cy-6, cx+6, cy+6, fill="#00FF66", outline="")
+        self.id_base_track = canvas.create_oval(cx-24, cy-24, cx+24, cy+24, outline="#16202A", width=1.5)
+        self.id_core_body = canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill="#0F171F", outline=PALETTE["crt_cyan"], width=1.5)
+        self.id_core_center = canvas.create_oval(cx-5, cy-5, cx+5, cy+5, fill=PALETTE["crt_green"], outline="")
 
-        # 12 Micro-Puntos Orbitales
-        self.particles = []
-        for _ in range(self.num_particles):
-            p = canvas.create_oval(0, 0, 0, 0, fill="#00E5FF", outline="")
-            self.particles.append(p)
+        self.particles = [canvas.create_oval(0, 0, 0, 0, fill=PALETTE["crt_cyan"], outline="") for _ in range(self.num_particles)]
 
-    def update(self, t_now, bpm, ecg_val):
+    def update(self, t_now, bpm, ecg_val, is_flatline, sedentary_mins):
         cx, cy = self.cx, self.cy
-        self.bpm = bpm
 
-        # Expansión sistólica sutil al latir
-        expansion = max(0.0, ecg_val) * 4.0
-        core_r = 13.0 + expansion
-        center_r = 5.0 + (expansion * 0.5)
+        if is_flatline:
+            # Atenuación en Flatline
+            self.canvas.itemconfig(self.id_core_body, outline=PALETTE["border_normal"])
+            self.canvas.itemconfig(self.id_core_center, fill=PALETTE["red_alarm"])
+            core_r, center_r = 11.0, 4.0
+        else:
+            # Color por tiempo de sedentarismo
+            if sedentary_mins >= 45:
+                accent_col = PALETTE["amber"]
+            else:
+                accent_col = PALETTE["crt_green"] if bpm < 95 else PALETTE["amber"]
+
+            self.canvas.itemconfig(self.id_core_body, outline=PALETTE["crt_cyan"])
+            self.canvas.itemconfig(self.id_core_center, fill=accent_col)
+
+            expansion = max(0.0, ecg_val) * 3.5
+            core_r = 11.5 + expansion
+            center_r = 4.5 + (expansion * 0.5)
 
         self.canvas.coords(self.id_core_body, cx - core_r, cy - core_r, cx + core_r, cy + core_r)
         self.canvas.coords(self.id_core_center, cx - center_r, cy - center_r, cx + center_r, cy + center_r)
 
-        # Color reactivo del centro
-        center_col = HUD_PALETTE["crt_green"] if bpm < 95 else HUD_PALETTE["amber_alert"]
-        self.canvas.itemconfig(self.id_core_center, fill=center_col)
-
-        # ROTACIÓN CALMADA Y SUAVE: ~22 grados por segundo (~16 segundos por vuelta completa)
-        rot_speed = 18.0 + ((self.bpm - 60.0) * 0.3)
-        base_angle = (t_now * rot_speed) % 360.0
-        orbit_r = 24.0
-
+        # Rotación calmada: 20 deg/s
+        base_angle = (t_now * 20.0) % 360.0
+        orbit_r = 20.0
         for i, p_id in enumerate(self.particles):
             angle = base_angle + (i * (360.0 / self.num_particles))
             rad = math.radians(angle)
             px = cx + math.cos(rad) * orbit_r
             py = cy + math.sin(rad) * orbit_r
-            p_size = 1.3
-            self.canvas.coords(p_id, px - p_size, py - p_size, px + p_size, py + p_size)
+            self.canvas.coords(p_id, px - 1.2, py - 1.2, px + 1.2, py + 1.2)
 
 
-# ── Aplicación Compacta y Legible: Cyber Telemetry HUD ──────────────────
-class CyberTelemetryHUD(ctk.CTk):
+# ── Aplicación Principal 300ms Glanceable HUD (310 x 170 px) ────────────
+class GlanceableCyberHUD(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Ventana Superpuesta Frameless
+        # Ventana Superpuesta Sin Bordes de Windows
         self.overrideredirect(True)
         self.attributes("-topmost", True)
-        self.configure(fg_color=HUD_PALETTE["bg_base"])
+        self.configure(fg_color=PALETTE["bg_base"])
 
-        # Dimensiones Exactas del HUD (320 x 192 px)
-        self.hud_w = 320
-        self.hud_h = 192
+        # Dimensiones Compactas (310 x 170 px)
+        self.hud_w = 310
+        self.hud_h = 170
         screen_w = self.winfo_screenwidth()
         pos_x = screen_w - self.hud_w - 20
         pos_y = 60
@@ -357,17 +352,19 @@ class CyberTelemetryHUD(ctk.CTk):
             "steps": 2934,
             "spo2": 98,
             "sedentary_seconds": 59 * 60,
-            "flash_edge_time": 0.0
+            "flash_edge_time": 0.0,
+            "walking_speed": 0.0,
+            "last_step_rx": 0.0
         }
 
         # Motores Gráficos
-        self.ecg_engine = SyntheticECGGenerator(buffer_len=140)
+        self.ecg_engine = SyntheticECGGenerator(buffer_len=125)
 
-        # Construir Interfaz de Alta Legibilidad
+        # Construir Interfaz Visual Pura
         self.setup_ui()
 
         # Núcleo Halo
-        self.halo_core = IndustrialHaloCore(self.canvas_halo, cx=38, cy=40)
+        self.halo_core = IndustrialHaloCore(self.canvas_halo, cx=32, cy=32)
 
         # Iniciar Worker BLE
         self.ble_worker = BLETelemetryBridge(self.data_queue, self.cmd_queue)
@@ -377,7 +374,7 @@ class CyberTelemetryHUD(ctk.CTk):
         self.last_loop_time = time.perf_counter()
         self.after(16, self.render_60fps_loop)
         self.after(60, self.process_telemetry_queue)
-        self.after(1000, self.update_sedentary_and_metrics)
+        self.after(1000, self.update_sedentary_state)
 
     def start_drag(self, event):
         self._drag_x = event.x
@@ -393,120 +390,118 @@ class CyberTelemetryHUD(ctk.CTk):
         sys.exit(0)
 
     def setup_ui(self):
-        # Marco Principal Contenedor
-        self.container = ctk.CTkFrame(self, fg_color=HUD_PALETTE["bg_base"], corner_radius=8,
-                                      border_width=1, border_color=HUD_PALETTE["border_normal"])
+        # Marco Principal Contenedor con Borde Técnico
+        self.container = ctk.CTkFrame(self, fg_color=PALETTE["bg_base"], corner_radius=8,
+                                      border_width=1, border_color=PALETTE["border_normal"])
         self.container.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # ── 1. Header (0x1DBC · 72 BPM · [16% BAT] · [x]) ──
-        self.header = ctk.CTkFrame(self.container, fg_color="transparent", height=24)
-        self.header.pack(fill="x", padx=10, pady=(6, 2))
+        # ── 1. Header Minimalista (0x1DBC · 🛡 · ⚡ 16% · [x]) ──
+        self.header = ctk.CTkFrame(self.container, fg_color="transparent", height=22)
+        self.header.pack(fill="x", padx=10, pady=(5, 1))
 
         self.lbl_id = ctk.CTkLabel(self.header, text="0x1DBC", font=("Consolas", 10, "bold"),
-                                   text_color=HUD_PALETTE["crt_cyan"])
+                                   text_color=PALETTE["crt_cyan"])
         self.lbl_id.pack(side="left")
 
-        # Pulso en Vivo Grande y Claro
-        self.lbl_bpm_head = ctk.CTkLabel(self.header, text="72 BPM", font=("Consolas", 11, "bold"),
-                                         text_color=HUD_PALETTE["crt_green"])
-        self.lbl_bpm_head.pack(side="left", padx=10)
+        # Micro-Escudo LED Antispam
+        self.lbl_shield = ctk.CTkLabel(self.header, text=" 🛡", font=("Segoe UI", 10),
+                                       text_color=PALETTE["crt_green"])
+        self.lbl_shield.pack(side="left", padx=4)
 
         # Botón Cerrar
-        self.btn_close = ctk.CTkButton(self.header, text="x", width=16, height=16, corner_radius=2,
-                                       fg_color="transparent", hover_color=HUD_PALETTE["bg_card"],
-                                       text_color=HUD_PALETTE["text_sub"], font=("Segoe UI", 9),
+        self.btn_close = ctk.CTkButton(self.header, text="x", width=14, height=14, corner_radius=2,
+                                       fg_color="transparent", hover_color=PALETTE["bg_card"],
+                                       text_color=PALETTE["text_sub"], font=("Segoe UI", 9),
                                        command=self.close_hud)
         self.btn_close.pack(side="right")
 
-        # Batería Clara y Legible
-        self.lbl_bat = ctk.CTkLabel(self.header, text=f"BAT {self.telemetry['battery']}%",
-                                    font=("Consolas", 10, "bold"), text_color=HUD_PALETTE["text_sub"])
+        # Batería Símbolo + Porcentaje
+        self.lbl_bat = ctk.CTkLabel(self.header, text=f"⚡ {self.telemetry['battery']}%",
+                                    font=("Consolas", 10, "bold"), text_color=PALETTE["text_sub"])
         self.lbl_bat.pack(side="right", padx=(0, 6))
 
-        # Divisor Superior
-        self.div_top = ctk.CTkFrame(self.container, fg_color=HUD_PALETTE["border_normal"], height=1)
-        self.div_top.pack(fill="x", padx=8, pady=(2, 3))
+        # Divisor Superior Fino
+        self.div_top = ctk.CTkFrame(self.container, fg_color=PALETTE["border_normal"], height=1)
+        self.div_top.pack(fill="x", padx=8, pady=(2, 2))
 
-        # ── 2. Módulo Visual Center (Halo Core + Canvas ECG Waveform) ──
-        self.center_frame = ctk.CTkFrame(self.container, fg_color="transparent", height=86)
+        # ── 2. Módulo Visual Hero (Número Gigante 30pt + Halo + ECG Waveform) ──
+        self.center_frame = ctk.CTkFrame(self.container, fg_color="transparent", height=82)
         self.center_frame.pack(fill="x", padx=8, pady=0)
 
-        # Canvas Halo Core (Izquierda)
-        self.canvas_halo = tk.Canvas(self.center_frame, width=76, height=80,
-                                     bg=HUD_PALETTE["bg_base"], highlightthickness=0)
-        self.canvas_halo.pack(side="left", padx=(0, 4))
+        # Columna Izquierda: Halo Pequeño + Número HERO Gigante de 30pt
+        self.hero_col = ctk.CTkFrame(self.center_frame, fg_color="transparent", width=95)
+        self.hero_col.pack(side="left", padx=(0, 4))
 
-        # Contenedor Derecho: Canvas Osciloscopio ECG + Subtítulo de Estado
-        self.right_col = ctk.CTkFrame(self.center_frame, fg_color="transparent")
-        self.right_col.pack(side="left", fill="both", expand=True)
+        # Halo Reactor Compacto
+        self.canvas_halo = tk.Canvas(self.hero_col, width=64, height=48,
+                                     bg=PALETTE["bg_base"], highlightthickness=0)
+        self.canvas_halo.pack(side="top", pady=(0, 0))
 
-        # Canvas ECG Waveform
-        self.canvas_ecg = tk.Canvas(self.right_col, width=220, height=54,
-                                    bg=HUD_PALETTE["bg_card"], highlightthickness=1,
-                                    highlightbackground=HUD_PALETTE["border_normal"])
-        self.canvas_ecg.pack(fill="x", pady=(0, 3))
+        # NÚMERO HERO GIGANTE (30pt Bold)
+        self.lbl_hero_bpm = ctk.CTkLabel(self.hero_col, text="72",
+                                         font=("Consolas", 26, "bold"),
+                                         text_color=PALETTE["crt_green"])
+        self.lbl_hero_bpm.pack(side="top", pady=(0, 0))
 
-        # Subtítulo Técnico Claro: [ ENFOQUE ] Ritmo Estable [ANTISPAM]
-        self.sync_row = ctk.CTkFrame(self.right_col, fg_color="transparent", height=18)
-        self.sync_row.pack(fill="x")
+        # Columna Derecha: Canvas Osciloscopio ECG Grande y Nítido
+        self.canvas_ecg = tk.Canvas(self.center_frame, width=195, height=76,
+                                    bg=PALETTE["bg_card"], highlightthickness=1,
+                                    highlightbackground=PALETTE["border_normal"])
+        self.canvas_ecg.pack(side="left", fill="both", expand=True)
 
-        self.lbl_sync_status = ctk.CTkLabel(self.sync_row, text="RITMO CARDÍACO ESTABLE",
-                                           font=("Consolas", 8, "bold"), text_color=HUD_PALETTE["text_sub"], anchor="w")
-        self.lbl_sync_status.pack(side="left")
+        # Divisor Inferior Fino
+        self.div_bot = ctk.CTkFrame(self.container, fg_color=PALETTE["border_normal"], height=1)
+        self.div_bot.pack(fill="x", padx=8, pady=(3, 3))
 
-        self.lbl_antispam = ctk.CTkLabel(self.sync_row, text="[ANTISPAM OK]", font=("Consolas", 8, "bold"),
-                                         text_color=HUD_PALETTE["crt_green"])
-        self.lbl_antispam.pack(side="right")
-
-        # Divisor Inferior
-        self.div_bot = ctk.CTkFrame(self.container, fg_color=HUD_PALETTE["border_normal"], height=1)
-        self.div_bot.pack(fill="x", padx=8, pady=(4, 4))
-
-        # ── 3. Panel Inferior de 3 Mini-Pills Grandes y Legibles (Cero Texto Diminuto) ──
+        # ── 3. Fila de Instrumentación Pura (Iconos + Números Grandes, Cero Texto Explicativo) ──
         self.pills_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.pills_frame.pack(fill="x", padx=8, pady=(0, 6))
+        self.pills_frame.pack(fill="x", padx=8, pady=(0, 5))
 
-        # Pill 1: Sedentarismo (Destacada, 10px bold)
-        self.pill_sedentary = ctk.CTkFrame(self.pills_frame, fg_color=HUD_PALETTE["amber_bg"],
-                                           border_width=1, border_color=HUD_PALETTE["amber_border"],
-                                           corner_radius=4, height=28)
-        self.pill_sedentary.pack(side="left", fill="x", expand=True, padx=(0, 3))
+        # ⏱ Tiempo Sentado (Ámbar si >45m, Verde si activo)
+        self.pill_time = ctk.CTkFrame(self.pills_frame, fg_color=PALETTE["bg_pill"],
+                                      border_width=1, border_color=PALETTE["border_normal"],
+                                      corner_radius=4, height=26)
+        self.pill_time.pack(side="left", fill="x", expand=True, padx=(0, 3))
 
-        self.lbl_sedentary = ctk.CTkLabel(self.pill_sedentary, text="⚠ 59m QUIETO",
-                                          font=("Consolas", 10, "bold"), text_color=HUD_PALETTE["amber_alert"])
-        self.lbl_sedentary.pack(padx=4, pady=3)
+        self.lbl_time = ctk.CTkLabel(self.pill_time, text="⏱ 59m",
+                                     font=("Consolas", 11, "bold"), text_color=PALETTE["amber"])
+        self.lbl_time.pack(padx=6, pady=2)
 
-        # Pill 2: SpO2 Oxigenación (10px bold)
-        self.pill_spo2 = ctk.CTkFrame(self.pills_frame, fg_color=HUD_PALETTE["bg_pill"],
-                                      border_width=1, border_color=HUD_PALETTE["border_pill"],
-                                      corner_radius=4, height=28)
+        # 🫁 SpO2 Oxígeno (Cian)
+        self.pill_spo2 = ctk.CTkFrame(self.pills_frame, fg_color=PALETTE["bg_pill"],
+                                      border_width=1, border_color=PALETTE["border_normal"],
+                                      corner_radius=4, height=26)
         self.pill_spo2.pack(side="left", fill="x", expand=True, padx=3)
 
-        self.lbl_spo2 = ctk.CTkLabel(self.pill_spo2, text="SPO2 98%",
-                                     font=("Consolas", 10, "bold"), text_color=HUD_PALETTE["crt_cyan"])
-        self.lbl_spo2.pack(padx=4, pady=3)
+        self.lbl_spo2 = ctk.CTkLabel(self.pill_spo2, text="🫁 98%",
+                                     font=("Consolas", 11, "bold"), text_color=PALETTE["crt_cyan"])
+        self.lbl_spo2.pack(padx=6, pady=2)
 
-        # Pill 3: Pasos / Actividad (10px bold)
-        self.pill_steps = ctk.CTkFrame(self.pills_frame, fg_color=HUD_PALETTE["bg_pill"],
-                                       border_width=1, border_color=HUD_PALETTE["border_pill"],
-                                       corner_radius=4, height=28)
+        # 👟 Pasos / Actividad (Blanco Nítido)
+        self.pill_steps = ctk.CTkFrame(self.pills_frame, fg_color=PALETTE["bg_pill"],
+                                       border_width=1, border_color=PALETTE["border_normal"],
+                                       corner_radius=4, height=26)
         self.pill_steps.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
-        self.lbl_steps = ctk.CTkLabel(self.pill_steps, text="2.9k PASOS",
-                                      font=("Consolas", 10, "bold"), text_color=HUD_PALETTE["text_hero"])
-        self.lbl_steps.pack(padx=4, pady=3)
+        self.lbl_steps = ctk.CTkLabel(self.pill_steps, text="👟 2.9k",
+                                      font=("Consolas", 11, "bold"), text_color=PALETTE["text_hero"])
+        self.lbl_steps.pack(padx=6, pady=2)
 
-    # ── Renderizado del Osciloscopio ECG a 60 FPS ──
-    def draw_ecg_oscilloscope(self, buffer):
+    # ── Renderizado del Osciloscopio con Parallax y Flatline ──
+    def draw_ecg_oscilloscope(self, buffer, is_flatline, parallax_off):
         self.canvas_ecg.delete("all")
-        w = 220
-        h = 54
+        w = 195
+        h = 76
         mid_y = h / 2.0
 
-        for gx in range(0, w, 20):
-            self.canvas_ecg.create_line(gx, 0, gx, h, fill=HUD_PALETTE["ecg_grid"], width=1)
+        # Cuadrícula CRT con Parallax
+        for gx in range(-20, w + 20, 20):
+            x_line = gx + parallax_off
+            self.canvas_ecg.create_line(x_line, 0, x_line, h, fill=PALETTE["ecg_grid"], width=1)
         for gy in range(0, h, 14):
-            self.canvas_ecg.create_line(0, gy, w, gy, fill=HUD_PALETTE["ecg_grid"], width=1)
+            self.canvas_ecg.create_line(0, gy, w, gy, fill=PALETTE["ecg_grid"], width=1)
+
+        trace_col = PALETTE["red_alarm"] if is_flatline else PALETTE["crt_green"]
 
         step = w / float(len(buffer) - 1)
         coords = []
@@ -518,34 +513,49 @@ class CyberTelemetryHUD(ctk.CTk):
         for i in range(len(coords) - 1):
             x1, y1 = coords[i]
             x2, y2 = coords[i+1]
-            self.canvas_ecg.create_line(x1, y1, x2, y2, fill=HUD_PALETTE["ecg_trace"], width=1.5)
+            self.canvas_ecg.create_line(x1, y1, x2, y2, fill=trace_col, width=1.5)
 
         lx, ly = coords[-1]
-        self.canvas_ecg.create_oval(lx - 2, ly - 2, lx + 2, ly + 2, fill="#FFFFFF", outline=HUD_PALETTE["crt_cyan"])
+        cursor_col = PALETTE["red_alarm"] if is_flatline else "#FFFFFF"
+        self.canvas_ecg.create_oval(lx - 2, ly - 2, lx + 2, ly + 2, fill=cursor_col, outline=PALETTE["crt_cyan"])
 
-    # ── Loop de Animación 60 FPS Locked ──
+    # ── Loop de Animación a 60 FPS ──
     def render_60fps_loop(self):
         t_now = time.perf_counter()
         dt = t_now - self.last_loop_time
         self.last_loop_time = t_now
 
-        # 1. Motor ECG Sintético Interpolado
-        ecg_buf, curr_bpm = self.ecg_engine.step(dt)
-        self.draw_ecg_oscilloscope(ecg_buf)
+        # 1. Motor ECG con Parallax y Detección de Flatline
+        ecg_buf, curr_bpm, is_flat = self.ecg_engine.step(dt, self.telemetry["walking_speed"])
+        self.draw_ecg_oscilloscope(ecg_buf, is_flat, self.ecg_engine.parallax_offset)
 
-        # 2. Halo Core con Rotación Calmada
-        latest_ecg = ecg_buf[-1]
-        self.halo_core.update(t_now, curr_bpm, latest_ecg)
+        # 2. Halo Core
+        mins_sed = self.telemetry["sedentary_seconds"] // 60
+        self.halo_core.update(t_now, curr_bpm, ecg_buf[-1], is_flat, mins_sed)
 
-        # 3. Destello de borde por llegada de paquete BLE (120ms)
-        if t_now - self.telemetry["flash_edge_time"] < 0.12:
-            self.container.configure(border_color=HUD_PALETTE["border_flash"])
+        # 3. Color Dinámico del Número HERO
+        if is_flat:
+            self.lbl_hero_bpm.configure(text="--", text_color=PALETTE["red_alarm"])
         else:
-            self.container.configure(border_color=HUD_PALETTE["border_normal"])
+            col = PALETTE["crt_green"] if curr_bpm < 95 else PALETTE["amber"]
+            self.lbl_hero_bpm.configure(text=str(int(curr_bpm)), text_color=col)
+
+        # 4. Destello de Paquete BLE / Glitch Sedentario
+        if t_now - self.telemetry["flash_edge_time"] < 0.12:
+            self.container.configure(border_color=PALETTE["border_flash"])
+        elif mins_sed >= 60:
+            # Micro-glitch de pulso ámbar/rojo a partir de 60m
+            pulse = math.sin(t_now * 4.0)
+            b_col = PALETTE["border_red"] if pulse > 0.3 else PALETTE["border_amber"]
+            self.container.configure(border_color=b_col)
+        elif mins_sed >= 45:
+            self.container.configure(border_color=PALETTE["border_amber"])
+        else:
+            self.container.configure(border_color=PALETTE["border_normal"])
 
         self.after(16, self.render_60fps_loop)
 
-    # ── Loop de Cola de Telemetría BLE ──
+    # ── Loop de Telemetría BLE ──
     def process_telemetry_queue(self):
         try:
             while not self.data_queue.empty():
@@ -559,49 +569,54 @@ class CyberTelemetryHUD(ctk.CTk):
                     bpm = pkt.get("value")
                     self.telemetry["target_bpm"] = bpm
                     self.ecg_engine.set_target_bpm(bpm)
-                    self.lbl_bpm_head.configure(text=f"{bpm} BPM")
 
                 elif p_type == "battery":
                     pct = pkt.get("value")
                     self.telemetry["battery"] = pct
-                    self.lbl_bat.configure(text=f"BAT {pct}%")
+                    self.lbl_bat.configure(text=f"⚡ {pct}%")
 
                 elif p_type == "spo2":
                     val = pkt.get("value")
                     self.telemetry["spo2"] = val
-                    self.lbl_spo2.configure(text=f"SPO2 {val}%")
+                    self.lbl_spo2.configure(text=f"🫁 {val}%")
 
                 elif p_type == "activity":
                     steps = pkt.get("steps")
                     self.telemetry["steps"] = steps
                     if steps >= 1000:
-                        self.lbl_steps.configure(text=f"{steps/1000.0:.1f}k PASOS")
+                        self.lbl_steps.configure(text=f"👟 {steps/1000.0:.1f}k")
                     else:
-                        self.lbl_steps.configure(text=f"{steps} PASOS")
+                        self.lbl_steps.configure(text=f"👟 {steps}")
+
+                elif p_type == "step_inc":
+                    self.telemetry["sedentary_seconds"] = 0
+                    self.telemetry["walking_speed"] = 1.0
+                    self.telemetry["last_step_rx"] = time.perf_counter()
 
         except queue.Empty:
             pass
 
+        # Desacelerar parallax tras 2s sin pasos
+        if time.perf_counter() - self.telemetry["last_step_rx"] > 2.0:
+            self.telemetry["walking_speed"] = 0.0
+
         self.after(60, self.process_telemetry_queue)
 
-    # ── Actualización de Sedentarismo y Estado (1 Hz) ──
-    def update_sedentary_and_metrics(self):
+    # ── Actualización de Estado de Sedentarismo (1 Hz) ──
+    def update_sedentary_state(self):
         self.telemetry["sedentary_seconds"] += 1
         mins = self.telemetry["sedentary_seconds"] // 60
 
-        # Si supera 45m inactivo -> Pill ámbar de advertencia
         if mins >= 45:
-            self.pill_sedentary.configure(fg_color=HUD_PALETTE["amber_bg"], border_color=HUD_PALETTE["amber_border"])
-            self.lbl_sedentary.configure(text=f"⚠ {mins}m QUIETO", text_color=HUD_PALETTE["amber_alert"])
-            self.lbl_sync_status.configure(text="PAUSA RECOMENDADA", text_color=HUD_PALETTE["amber_alert"])
+            self.lbl_time.configure(text=f"⏱ {mins}m", text_color=PALETTE["amber"])
+            self.pill_time.configure(border_color=PALETTE["border_amber"])
         else:
-            self.pill_sedentary.configure(fg_color=HUD_PALETTE["bg_pill"], border_color=HUD_PALETTE["border_pill"])
-            self.lbl_sedentary.configure(text=f"ACTIVO {mins}m", text_color=HUD_PALETTE["crt_green"])
-            self.lbl_sync_status.configure(text="RITMO CARDÍACO ESTABLE", text_color=HUD_PALETTE["text_sub"])
+            self.lbl_time.configure(text=f"⏱ {mins}m", text_color=PALETTE["crt_green"])
+            self.pill_time.configure(border_color=PALETTE["border_normal"])
 
-        self.after(1000, self.update_sedentary_and_metrics)
+        self.after(1000, self.update_sedentary_state)
 
 
 if __name__ == "__main__":
-    app = CyberTelemetryHUD()
+    app = GlanceableCyberHUD()
     app.mainloop()
