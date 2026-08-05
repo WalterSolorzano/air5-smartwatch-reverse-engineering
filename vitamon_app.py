@@ -1,6 +1,7 @@
 """
-JARVIS BIOMETRIC HUD — Smartwatch Air5 BLE Real-time Overlay
-Inspirado en interfaces de ciencia ficcion (HAL 9000 / Jarvis Core) con animacion procedural sincronizada al pulso.
+JARVIS BIOMETRIC HUD — Smartwatch Air5 BLE Ultra-Smooth 60 FPS Edition
+Optimizaciones de alto rendimiento: renderizado por coordenadas pre-asignadas (zero-garbage-collection),
+animación procedural por delta-time exacto y modo cápsula por doble clic.
 """
 import sys
 import os
@@ -224,131 +225,149 @@ class BLEBridgeThread(threading.Thread):
                 await asyncio.sleep(4)
 
 
-# ── Motor Procedural del Reactor / Núcleo HAL 9000 ──────────────────────
-class JarvisReactorCore:
-    """Núcleo cibernético reactivo que late proceduralmente sincronizado con el BPM real del usuario."""
-    def __init__(self, canvas):
+# ── Motor del Núcleo HAL 9000 Optimizado a 60 FPS (Zero-Garbage) ─────────
+class HighPerformanceReactor:
+    """Motor gráfico de latido cardíaco optimizado a 60 FPS con items pre-construidos en Canvas."""
+    def __init__(self, canvas, cx=44, cy=44):
         self.canvas = canvas
-        self.frame = 0
+        self.cx = cx
+        self.cy = cy
         self.bpm = 72
-        self.last_beat_time = time.time()
+        self.smoothed_bpm = 72.0
 
-    def update_bpm(self, bpm):
-        self.bpm = max(40, min(180, bpm))
+        # Pre-crear todos los elementos en el canvas una sola vez (Zero Garbage Collection)
+        # Anillos de carcasa
+        self.id_ring3 = canvas.create_oval(cx-38, cy-38, cx+38, cy+38, fill="#0F1622", outline="#1F2D40", width=1.5)
+        self.id_ring2 = canvas.create_oval(cx-32, cy-32, cx+32, cy+32, fill="#0A0F18", outline="#162232", width=1)
+        self.id_ring1 = canvas.create_oval(cx-25, cy-25, cx+25, cy+25, fill="#06090E", outline="#111A26", width=1)
 
-    def render(self, cx=44, cy=44):
-        self.canvas.delete("all")
-        self.frame += 1
-        f = self.frame
+        # Resplandores difusos
+        self.id_glow_outer = canvas.create_oval(cx-20, cy-20, cx+20, cy+20, fill="#2A0B12", outline="")
+        self.id_glow_mid = canvas.create_oval(cx-16, cy-16, cx+16, cy+16, fill="#4C0D1A", outline="")
 
-        # Calculo de frecuencia de latido en tiempo real
-        # Periodo del latido = 60 / BPM segundos
-        beat_freq = self.bpm / 60.0
-        now = time.time()
-        beat_phase = (now * beat_freq * 2 * math.pi) % (2 * math.pi)
+        # Núcleo e iris
+        self.id_core = canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill="#E11D48", outline="#FF4A5A", width=1.5)
+        self.id_center = canvas.create_oval(cx-6, cy-6, cx+6, cy+6, fill="#FF6B7A", outline="#FFA4AD", width=1)
 
-        # Pulso cardiaco matematico (curva sistolica)
-        pulse_expansion = math.sin(beat_phase)
-        if pulse_expansion < 0:
-            pulse_expansion = 0.0
+        # Hendiduras / Slits de HAL 9000
+        self.id_slits = [canvas.create_line(0, 0, 0, 0, fill="#0B0F16", width=1.5) for _ in range(5)]
 
-        # 1. Anillos concentricos oscuros de la carcasa metalica
-        self.canvas.create_oval(cx - 38, cy - 38, cx + 38, cy + 38, fill="#0F1622", outline="#1F2D40", width=1.5)
-        self.canvas.create_oval(cx - 32, cy - 32, cx + 32, cy + 32, fill="#0A0F18", outline="#162232", width=1)
-        self.canvas.create_oval(cx - 25, cy - 25, cx + 25, cy + 25, fill="#06090E", outline="#111A26", width=1)
+        # Rayo láser de escaneo
+        self.id_laser = canvas.create_line(0, 0, 0, 0, fill="#FFFFFF", width=1.5)
 
-        # 2. Resplandor difuso del reactor rojo (Glow dinamico)
-        glow_r = 16 + int(pulse_expansion * 5)
-        self.canvas.create_oval(cx - glow_r - 4, cy - glow_r - 4, cx + glow_r + 4, cy + glow_r + 4,
-                                fill="#2A0B12", outline="")
-        self.canvas.create_oval(cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r,
-                                fill="#4C0D1A", outline="")
+        # Partícula orbital
+        self.id_orbit = canvas.create_oval(0, 0, 0, 0, fill="#FF4A5A", outline="")
 
-        # 3. Núcleo rojo brillante central (Iris)
-        core_r = 12 + int(pulse_expansion * 3)
-        self.canvas.create_oval(cx - core_r, cy - core_r, cx + core_r, cy + core_r,
-                                fill="#E11D48", outline="#FF4A5A", width=1.5)
+    def set_bpm(self, bpm):
+        self.bpm = max(40, min(190, bpm))
 
-        # 4. Centro incandescente
-        center_r = 6 + int(pulse_expansion * 2)
-        self.canvas.create_oval(cx - center_r, cy - center_r, cx + center_r, cy + center_r,
-                                fill="#FF6B7A", outline="#FFA4AD", width=1)
+    def update_frame(self, t_now):
+        cx, cy = self.cx, self.cy
 
-        # 5. Rejilla horizontal de escaneo (Scanline slits de HAL 9000 / Jarvis)
-        for y_off in [-8, -4, 0, 4, 8]:
+        # Suavizado de transicion de BPM
+        self.smoothed_bpm += (self.bpm - self.smoothed_bpm) * 0.08
+        freq = self.smoothed_bpm / 60.0
+
+        # Curva de latido cardíaco fisiológico (Asimétrica y continua)
+        phase = (t_now * freq * 2.0 * math.pi) % (2.0 * math.pi)
+        # Función de latido sístole-diástole suave
+        pulse = math.sin(phase)
+        pulse = max(0.0, pulse) ** 1.8
+
+        # Dimensiones dinámicas
+        glow_r = 15.0 + (pulse * 6.5)
+        core_r = 11.5 + (pulse * 3.5)
+        center_r = 5.0 + (pulse * 2.2)
+
+        # 1. Actualizar resplandores (Solo coords)
+        self.canvas.coords(self.id_glow_outer, cx - glow_r - 5, cy - glow_r - 5, cx + glow_r + 5, cy + glow_r + 5)
+        self.canvas.coords(self.id_glow_mid, cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r)
+
+        # 2. Actualizar núcleo central
+        self.canvas.coords(self.id_core, cx - core_r, cy - core_r, cx + core_r, cy + core_r)
+        self.canvas.coords(self.id_center, cx - center_r, cy - center_r, cx + center_r, cy + center_r)
+
+        # 3. Actualizar hendiduras
+        slit_offsets = [-7.0, -3.5, 0.0, 3.5, 7.0]
+        for i, y_off in enumerate(slit_offsets):
             if abs(y_off) < core_r:
-                slit_w = int(math.sqrt(max(0, core_r**2 - y_off**2)))
-                self.canvas.create_line(cx - slit_w, cy + y_off, cx + slit_w, cy + y_off,
-                                        fill="#0B0F16", width=1.5)
+                slit_w = math.sqrt(max(0.0, core_r**2 - y_off**2))
+                self.canvas.coords(self.id_slits[i], cx - slit_w, cy + y_off, cx + slit_w, cy + y_off)
+            else:
+                self.canvas.coords(self.id_slits[i], 0, 0, 0, 0)
 
-        # 6. Rayo de escaneo laser horizontal en movimiento
-        scan_y = cy + int(math.sin(f * 0.15) * (core_r - 2))
-        scan_w = int(math.sqrt(max(0, core_r**2 - (scan_y - cy)**2)))
-        self.canvas.create_line(cx - scan_w, scan_y, cx + scan_w, scan_y, fill="#FFFFFF", width=1)
+        # 4. Rayo láser oscilante continuo
+        scan_phase = (t_now * 3.2) % (2.0 * math.pi)
+        scan_y = cy + (math.sin(scan_phase) * (core_r - 2.5))
+        scan_w = math.sqrt(max(0.0, core_r**2 - (scan_y - cy)**2))
+        self.canvas.coords(self.id_laser, cx - scan_w, scan_y, cx + scan_w, scan_y)
 
-        # 7. Marcadores de energia orbitales
-        orb_angle = (f * 3) % 360
+        # 5. Partícula orbital fluida
+        orb_angle = (t_now * 160.0) % 360.0
         rad = math.radians(orb_angle)
-        ox = cx + math.cos(rad) * 28
-        oy = cy + math.sin(rad) * 28
-        self.canvas.create_oval(ox - 1.5, oy - 1.5, ox + 1.5, oy + 1.5, fill="#FF4A5A", outline="")
+        ox = cx + math.cos(rad) * 28.0
+        oy = cy + math.sin(rad) * 28.0
+        self.canvas.coords(self.id_orbit, ox - 1.5, oy - 1.5, ox + 1.5, oy + 1.5)
 
 
-# ── Aplicacion Principal: Jarvis HUD Overlay ────────────────────────────
+# ── Aplicacion Principal: Jarvis HUD 60 FPS ─────────────────────────────
 class JarvisHUDApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Ventana Superpuesta Frameless (Estilo Discord / Cyber HUD)
+        # Ventana Superpuesta Frameless
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(fg_color=HUD_THEME["bg_window"])
 
-        # Dimensiones y posicion fija elegante
-        self.width = 330
-        self.height = 250
-        screen_w = self.winfo_screenwidth()
-        pos_x = screen_w - self.width - 24
-        pos_y = 60
-        self.geometry(f"{self.width}x{self.height}+{pos_x}+{pos_y}")
+        # Dimensiones y Posicionamiento Inicial
+        self.width_full = 330
+        self.height_full = 250
+        self.is_mini = False
 
-        # Sistema de arrastre fluido
+        screen_w = self.winfo_screenwidth()
+        pos_x = screen_w - self.width_full - 24
+        pos_y = 60
+        self.geometry(f"{self.width_full}x{self.height_full}+{pos_x}+{pos_y}")
+
+        # Sistema de arrastre suave en cualquier parte
         self.bind("<ButtonPress-1>", self.start_drag)
         self.bind("<B1-Motion>", self.do_drag)
+        self.bind("<Double-Button-1>", self.toggle_mini_mode)
 
-        # Colas de datos
+        # Colas de comunicación
         self.data_queue = queue.Queue()
         self.cmd_queue = queue.Queue()
 
-        # Telemetria en Tiempo Real
+        # Telemetría y estado
         self.metrics = {
             "hr": 72,
             "hr_samples": [72],
-            "stress_label": "BAJO",
             "stress_pct": 0.28,
             "battery": 16,
             "steps": 2934,
             "spo2": 98,
             "system_status": "SISTEMA_OK",
-            "sedentary_seconds": 50 * 60,  # Contador de tiempo sentado
-            "last_step_count": 2934,
-            "last_step_time": time.time()
+            "sedentary_seconds": 50 * 60,
+            "last_step_count": 2934
         }
 
-        # Inicializar Interfaz de Usuario
+        # Construir Interfaz
         self.setup_ui()
 
-        # Iniciar Núcleo Reactor
-        self.reactor = JarvisReactorCore(self.canvas_reactor)
+        # Inicializar Motor Reactor Ultra-Smooth
+        self.reactor = HighPerformanceReactor(self.canvas_reactor, cx=44, cy=44)
 
-        # Iniciar Worker BLE
+        # Iniciar Worker BLE en background
         self.ble_thread = BLEBridgeThread(self.data_queue, self.cmd_queue)
         self.ble_thread.start()
 
-        # Timers de render y telemetria
-        self.start_clock = time.time()
-        self.after(33, self.update_reactor_loop)  # 30 FPS
-        self.after(80, self.process_ble_queue_loop)
+        # Ciclo de 60 FPS locked (~16ms)
+        self.last_anim_time = time.perf_counter()
+        self.after(16, self.render_60fps_loop)
+
+        # Ciclos de datos desacoplados (para no sobrecargar el hilo UI)
+        self.after(100, self.process_ble_queue_loop)
         self.after(1000, self.update_sedentary_timer_loop)
 
     def start_drag(self, event):
@@ -360,21 +379,42 @@ class JarvisHUDApp(ctk.CTk):
         y = self.winfo_y() + (event.y - self._drag_y)
         self.geometry(f"+{x}+{y}")
 
+    def toggle_mini_mode(self, event=None):
+        self.is_mini = not self.is_mini
+        if self.is_mini:
+            self.geometry(f"190x100")
+            self.header.pack_forget()
+            self.banner_alert.pack_forget()
+            self.sep_line.pack_forget()
+            self.row_stress.pack_forget()
+            self.row_bat.pack_forget()
+            self.footer.pack_forget()
+        else:
+            self.geometry(f"{self.width_full}x{self.height_full}")
+            self.container.pack_forget()
+            self.container.pack(fill="both", expand=True, padx=1, pady=1)
+            self.header.pack(fill="x", padx=14, pady=(10, 4))
+            self.banner_alert.pack(fill="x", padx=14, pady=(2, 8))
+            self.body_frame.pack(fill="both", expand=True, padx=14, pady=(0, 6))
+            self.sep_line.pack(fill="x", pady=(0, 6))
+            self.row_stress.pack(fill="x", pady=2)
+            self.row_bat.pack(fill="x", pady=2)
+            self.footer.pack(fill="x", padx=14, pady=(0, 10))
+
     def close_hud(self):
         self.destroy()
         sys.exit(0)
 
     def setup_ui(self):
-        # Marco Contenedor con Borde Cibernetico
+        # Marco Contenedor Principal
         self.container = ctk.CTkFrame(self, fg_color=HUD_THEME["bg_window"], corner_radius=14,
                                       border_width=1, border_color=HUD_THEME["border_window"])
         self.container.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # ── 1. Barra de Titulo (EN VIVO / JARVIS ... SISTEMA_OK) ──
+        # ── 1. Barra de Titulo (• EN VIVO / JARVIS ... SISTEMA_OK) ──
         self.header = ctk.CTkFrame(self.container, fg_color="transparent")
         self.header.pack(fill="x", padx=14, pady=(10, 4))
 
-        # Indicador Rojo + Titulo
         self.frame_hdr_left = ctk.CTkFrame(self.header, fg_color="transparent")
         self.frame_hdr_left.pack(side="left")
 
@@ -410,20 +450,20 @@ class JarvisHUDApp(ctk.CTk):
                                             text_color=HUD_THEME["red_alert"])
         self.lbl_banner_icon.pack(side="right", padx=10, pady=4)
 
-        # ── 3. Cuerpo Central (Reactor a la izquierda | Metricas a la derecha) ──
+        # ── 3. Cuerpo Central (Reactor + Metricas) ──
         self.body_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         self.body_frame.pack(fill="both", expand=True, padx=14, pady=(0, 6))
 
-        # Columna Izquierda: Reactor HAL 9000
+        # Reactor HAL 9000
         self.canvas_reactor = tk.Canvas(self.body_frame, width=88, height=88,
                                         bg=HUD_THEME["bg_window"], highlightthickness=0)
         self.canvas_reactor.pack(side="left", padx=(0, 10), pady=0)
 
-        # Columna Derecha: Metricas Cyberpunk
+        # Panel de Estadísticas
         self.stats_frame = ctk.CTkFrame(self.body_frame, fg_color="transparent")
         self.stats_frame.pack(side="left", fill="both", expand=True)
 
-        # Fila 1: PULSO_VIVO y Numero Grande
+        # PULSO_VIVO 72 LPM
         self.row_hr = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
         self.row_hr.pack(fill="x", pady=(0, 2))
 
@@ -439,11 +479,11 @@ class JarvisHUDApp(ctk.CTk):
                                        text_color=HUD_THEME["red_alert"])
         self.lbl_hr_num.pack(side="right")
 
-        # Linea divisoria fina
+        # Divisor
         self.sep_line = ctk.CTkFrame(self.stats_frame, fg_color=HUD_THEME["border_subtle"], height=1)
         self.sep_line.pack(fill="x", pady=(0, 6))
 
-        # Fila 2: ESTRÉS + Barra + Estado
+        # ESTRÉS
         self.row_stress = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
         self.row_stress.pack(fill="x", pady=2)
 
@@ -461,7 +501,7 @@ class JarvisHUDApp(ctk.CTk):
                                           font=("Consolas", 9, "bold"), text_color=HUD_THEME["text_hero"])
         self.lbl_stress_val.pack(side="right")
 
-        # Fila 3: BATERÍA + Barra + Porcentaje
+        # BATERÍA
         self.row_bat = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
         self.row_bat.pack(fill="x", pady=2)
 
@@ -479,7 +519,7 @@ class JarvisHUDApp(ctk.CTk):
                                         font=("Consolas", 9, "bold"), text_color=HUD_THEME["text_hero"])
         self.lbl_bat_val.pack(side="right")
 
-        # ── 4. Fila Inferior: TIEMPO SENTADO ──
+        # ── 4. Footer: TIEMPO SENTADO ──
         self.footer = ctk.CTkFrame(self.container, fg_color="transparent")
         self.footer.pack(fill="x", padx=14, pady=(0, 10))
 
@@ -491,13 +531,15 @@ class JarvisHUDApp(ctk.CTk):
                                          text_color=HUD_THEME["red_alert"])
         self.lbl_time_val.pack(side="right")
 
-    # ── Loop de Animacion del Reactor (30 FPS) ──
-    def update_reactor_loop(self):
-        self.reactor.update_bpm(self.metrics["hr"])
-        self.reactor.render()
-        self.after(33, self.update_reactor_loop)
+    # ── Loop a 60 FPS (16.6ms) con Delta-Time Exacto ──
+    def render_60fps_loop(self):
+        t_now = time.perf_counter()
+        self.reactor.set_bpm(self.metrics["hr"])
+        self.reactor.update_frame(t_now)
+        # Siguiente frame en exactamente 16ms
+        self.after(16, self.render_60fps_loop)
 
-    # ── Loop de Temporizador Inteligente de Sedentarismo ──
+    # ── Loop de Temporizador de Sedentarismo (1 Hz) ──
     def update_sedentary_timer_loop(self):
         self.metrics["sedentary_seconds"] += 1
         secs = self.metrics["sedentary_seconds"]
@@ -507,7 +549,7 @@ class JarvisHUDApp(ctk.CTk):
         time_str = f"{mins:02d}:{rem_secs:02d}"
         self.lbl_time_val.configure(text=time_str)
 
-        # Actualizar banner de estado segun el tiempo sentado
+        # Actualizar banner dinamicamente
         if mins >= 45:
             self.banner_alert.configure(fg_color=HUD_THEME["red_banner_bg"], border_color=HUD_THEME["red_banner_border"])
             self.lbl_banner_text.configure(text=f"¡MUÉVETE!  {mins} min sentado", text_color=HUD_THEME["red_alert"])
@@ -521,7 +563,7 @@ class JarvisHUDApp(ctk.CTk):
 
         self.after(1000, self.update_sedentary_timer_loop)
 
-    # ── Loop de Telemetria BLE ──
+    # ── Loop de Telemetria BLE Asincrona ──
     def process_ble_queue_loop(self):
         try:
             while not self.data_queue.empty():
@@ -542,7 +584,7 @@ class JarvisHUDApp(ctk.CTk):
                     self.metrics["hr"] = bpm
                     self.lbl_hr_num.configure(text=str(bpm))
 
-                    # Calcular nivel de estres segun variabilidad y pulso
+                    # Calcular nivel de estres segun variabilidad
                     self.metrics["hr_samples"].append(bpm)
                     if len(self.metrics["hr_samples"]) > 15:
                         self.metrics["hr_samples"].pop(0)
@@ -568,7 +610,6 @@ class JarvisHUDApp(ctk.CTk):
 
                 elif m_type == "daily_activity":
                     steps = msg.get("steps")
-                    # Si detectamos nuevos pasos, reiniciar contador de sedentarismo
                     if steps > self.metrics["last_step_count"] + 20:
                         self.metrics["sedentary_seconds"] = 0
                         self.metrics["last_step_count"] = steps
@@ -579,7 +620,7 @@ class JarvisHUDApp(ctk.CTk):
         except queue.Empty:
             pass
 
-        self.after(80, self.process_ble_queue_loop)
+        self.after(100, self.process_ble_queue_loop)
 
 
 if __name__ == "__main__":
