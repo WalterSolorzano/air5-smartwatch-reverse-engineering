@@ -61,10 +61,10 @@ class BLETelemetryBridge(threading.Thread):
     async def ble_worker(self):
         import asyncio
         try:
-            from winrt.windows.devices.bluetooth import BluetoothLEDevice
+            from winrt.windows.devices.bluetooth import BluetoothLEDevice, BluetoothConnectionStatus
             from winrt.windows.devices.bluetooth.genericattributeprofile import (
                 GattCommunicationStatus, GattWriteOption,
-                GattClientCharacteristicConfigurationDescriptorValue
+                GattClientCharacteristicConfigurationDescriptorValue, GattSession
             )
             from winrt.windows.storage.streams import DataWriter, DataReader
         except ImportError:
@@ -75,6 +75,8 @@ class BLETelemetryBridge(threading.Thread):
 
         while self.running:
             self.data_queue.put({"type": "status", "status": "scan"})
+            session = None
+            device = None
             try:
                 device = await BluetoothLEDevice.from_bluetooth_address_async(mac_int)
                 if not device:
@@ -82,14 +84,24 @@ class BLETelemetryBridge(threading.Thread):
                     await asyncio.sleep(4)
                     continue
 
+                session = await GattSession.from_device_id_async(device.bluetooth_device_id)
+                session.maintain_connection = True
+
+                # Esperar conexión si es necesario
+                for _ in range(10):
+                    if device.connection_status == BluetoothConnectionStatus.CONNECTED:
+                        break
+                    await asyncio.sleep(0.5)
+
                 services_res = await device.get_gatt_services_async()
                 if services_res.status != GattCommunicationStatus.SUCCESS:
                     self.data_queue.put({"type": "status", "status": "offline"})
-                    device.close()
+                    if session: session.close()
+                    if device: device.close()
                     await asyncio.sleep(4)
                     continue
 
-                write1 = notify1 = write2 = notify2 = None
+                write1 = notify1 = write2 = notify2 = battery_char = None
                 for svc in services_res.services:
                     chars_res = await svc.get_characteristics_async()
                     if chars_res.status != GattCommunicationStatus.SUCCESS:
@@ -100,12 +112,9 @@ class BLETelemetryBridge(threading.Thread):
                         if h == 0x0013: notify1 = ch
                         if h == 0x0017: write2 = ch
                         if h == 0x0019: notify2 = ch
+                        if h == 0x0029 or "2a19" in str(ch.uuid).lower(): battery_char = ch
 
-                if not write1 or not notify1:
-                    self.data_queue.put({"type": "status", "status": "offline"})
-                    device.close()
-                    await asyncio.sleep(4)
-                    continue
+                tok1 = tok2 = None
 
                 def on_ch1_notify(sender, args):
                     t_rx = time.perf_counter()
@@ -146,16 +155,19 @@ class BLETelemetryBridge(threading.Thread):
                         if 70 <= spo2 <= 100 and spo2 != 0xFF:
                             self.data_queue.put({"type": "spo2", "value": spo2, "t": t_rx})
 
-                await notify1.write_client_characteristic_configuration_descriptor_async(
-                    GattClientCharacteristicConfigurationDescriptorValue.NOTIFY
-                )
-                notify1.add_value_changed(on_ch1_notify)
-
-                if notify2:
-                    await notify2.write_client_characteristic_configuration_descriptor_async(
+                if notify1:
+                    r1 = await notify1.write_client_characteristic_configuration_descriptor_async(
                         GattClientCharacteristicConfigurationDescriptorValue.NOTIFY
                     )
-                    notify2.add_value_changed(on_ch2_notify)
+                    if r1 == GattCommunicationStatus.SUCCESS:
+                        tok1 = notify1.add_value_changed(on_ch1_notify)
+
+                if notify2:
+                    r2 = await notify2.write_client_characteristic_configuration_descriptor_async(
+                        GattClientCharacteristicConfigurationDescriptorValue.NOTIFY
+                    )
+                    if r2 == GattCommunicationStatus.SUCCESS:
+                        tok2 = notify2.add_value_changed(on_ch2_notify)
 
                 async def send_cmd(w, hex_str):
                     if not w: return
@@ -166,50 +178,87 @@ class BLETelemetryBridge(threading.Thread):
                     except: await w.write_value_async(buf, GattWriteOption.WRITE_WITHOUT_RESPONSE)
                     await asyncio.sleep(0.08)
 
-                # Handshake
-                await send_cmd(write1, "0808442a01243943756ffffed921005f784be1dc")
-                if write2:
-                    await send_cmd(write2, "00f4000000000000000000000000000000000402")
+                # Handshake & Antispam si el canal 1 está disponible
+                if write1:
+                    await send_cmd(write1, "0808442a01243943756ffffed921005f784be1dc")
+                    if write2:
+                        await send_cmd(write2, "00f4000000000000000000000000000000000402")
+                    await send_cmd(write1, "d1ff64")
+                    await send_cmd(write1, "d7160017000000")
+                    self.data_queue.put({"type": "antispam", "msg": "ACTIVE"})
 
-                # Antispam
-                await send_cmd(write1, "d1ff64")
-                await send_cmd(write1, "d7160017000000")
-                self.data_queue.put({"type": "antispam", "msg": "ACTIVE"})
+                    # Sync hora
+                    now = datetime.now()
+                    th = f"a3{now.year:04x}{now.month:02x}{now.day:02x}{now.hour:02x}{now.minute:02x}{now.second:02x}"
+                    await send_cmd(write1, th)
 
-                # Sync hora
-                now = datetime.now()
-                th = f"a3{now.year:04x}{now.month:02x}{now.day:02x}{now.hour:02x}{now.minute:02x}{now.second:02x}"
-                await send_cmd(write1, th)
+                    # Poll inicial
+                    await send_cmd(write1, "a2")
+                    await send_cmd(write1, "2601")
+                    if write2:
+                        await send_cmd(write2, "34fa")
 
-                # Poll inicial
-                await send_cmd(write1, "a2")
-                await send_cmd(write1, "2601")
-                if write2:
-                    await send_cmd(write2, "34fa")
+                # Leer batería inicial desde GATT estándar 0x180F si está disponible
+                if battery_char:
+                    try:
+                        b_val = await battery_char.read_value_async()
+                        if b_val.status == 0:
+                            rdr = DataReader.from_buffer(b_val.value)
+                            pct = rdr.read_byte()
+                            self.data_queue.put({"type": "battery", "value": int(pct), "t": time.perf_counter()})
+                    except Exception:
+                        pass
 
                 self.data_queue.put({"type": "status", "status": "online"})
 
                 last_poll = time.time()
+                last_bat_read = time.time()
                 while self.running:
                     try:
                         while not self.cmd_queue.empty():
                             cmd_req = self.cmd_queue.get_nowait()
                             act = cmd_req.get("action")
-                            if act == "silence":
+                            if act == "silence" and write1:
                                 await send_cmd(write1, "d1ff64")
                                 await send_cmd(write1, "d7160017000000")
                     except queue.Empty:
                         pass
 
-                    if time.time() - last_poll > 10:
+                    # Polling periódico de canal vendor si está disponible
+                    if write1 and time.time() - last_poll > 5:
                         last_poll = time.time()
                         await send_cmd(write1, "a2")
                         await send_cmd(write1, "2601")
+                        if write2:
+                            await send_cmd(write2, "34fa")
+
+                    # Polling de batería GATT estándar cada 10s
+                    if battery_char and time.time() - last_bat_read > 10:
+                        last_bat_read = time.time()
+                        try:
+                            b_val = await battery_char.read_value_async()
+                            if b_val.status == 0:
+                                rdr = DataReader.from_buffer(b_val.value)
+                                pct = rdr.read_byte()
+                                self.data_queue.put({"type": "battery", "value": int(pct), "t": time.perf_counter()})
+                        except Exception:
+                            pass
 
                     await asyncio.sleep(0.3)
 
-            except Exception:
+                if tok1 and notify1: notify1.remove_value_changed(tok1)
+                if tok2 and notify2: notify2.remove_value_changed(tok2)
+                if session: session.close()
+                if device: device.close()
+
+            except Exception as e:
                 self.data_queue.put({"type": "status", "status": "offline"})
+                if session:
+                    try: session.close()
+                    except: pass
+                if device:
+                    try: device.close()
+                    except: pass
                 await asyncio.sleep(4)
 
 
@@ -248,12 +297,9 @@ class SyntheticECGGenerator:
 
         self.parallax_offset = (self.parallax_offset + (walking_speed * dt * 40.0)) % 20.0
 
-        time_since_pkt = time.perf_counter() - self.last_packet_time
-        if time_since_pkt > 10.0:
-            self.is_flatline = True
+        if self.is_flatline:
             val = (random.random() - 0.5) * 0.04
         else:
-            self.is_flatline = False
             noise = (random.random() - 0.5) * 0.02
             val = self.get_qrs_sample(self.phase) + noise
 
@@ -642,7 +688,20 @@ class MasterUnifiedHUD(ctk.CTk):
 
                 self.telemetry["flash_edge_time"] = t_rx
 
-                if p_type == "live_hr":
+                if p_type == "status":
+                    st = pkt.get("status")
+                    if st == "online":
+                        self.lbl_title.configure(text_color=PALETTE["crt_green"])
+                        self.ecg_engine.is_flatline = False
+                    elif st == "scan":
+                        self.lbl_title.configure(text_color=PALETTE["crt_cyan"])
+                    elif st == "offline":
+                        self.lbl_title.configure(text_color=PALETTE["text_sub"])
+
+                elif p_type == "antispam":
+                    self.lbl_shield.configure(text_color=PALETTE["crt_green"])
+
+                elif p_type == "live_hr":
                     bpm = pkt.get("value")
                     self.telemetry["target_bpm"] = bpm
                     self.ecg_engine.set_target_bpm(bpm)
