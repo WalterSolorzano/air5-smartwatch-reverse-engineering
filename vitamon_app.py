@@ -1,10 +1,10 @@
 """
-CYBER-TELEMETRY HUD — Smartwatch Air5 BLE Compact (320x180 px)
+CYBER-TELEMETRY HUD — Smartwatch Air5 BLE Compact (320x195 px)
 Zero-AI / Industrial Engineering Theme:
 - Synthetic Interpolated QRS ECG Waveform Engine (Oscilloscope CRT at 60 FPS)
-- Central Halo Core with 16 Orbiting Particles synchronized to BPM
-- Micro-LED Segment Equalizer Bars
-- Real-time Terminal Marquee Diagnostic Ticker (Zero-Coach Culture)
+- Central Halo Core with 14 Orbiting Particles synchronized to BPM
+- Crisp Micro-LED Segment Battery Indicator
+- Structured 2-Line Cyber-Diagnostic Console (Zero truncated text, 100% legible)
 - Packet Arrival Edge Glow & Hexadecimal RAW Debugger
 """
 import sys
@@ -39,8 +39,6 @@ HUD_PALETTE = {
     "crt_cyan": "#00E5FF",
     "amber_alert": "#FF9900",
     "red_alarm": "#FF2A2A",
-    "led_on": "#00FF66",
-    "led_off": "#1B232B",
     "ecg_grid": "#131C24",
     "ecg_trace": "#00FF66"
 }
@@ -233,7 +231,7 @@ class BLETelemetryBridge(threading.Thread):
 # ── Generador Matemático de Onda ECG / PPG Sintética Interpolada ────────
 class SyntheticECGGenerator:
     """Motor continuo a 60 FPS que genera la forma de onda QRS fisiológica interpolada."""
-    def __init__(self, buffer_len=135):
+    def __init__(self, buffer_len=140):
         self.buffer_len = buffer_len
         self.buffer = [0.0] * buffer_len
         self.current_bpm = 72.0
@@ -290,9 +288,9 @@ class SyntheticECGGenerator:
         return self.buffer, self.current_bpm
 
 
-# ── Renderizador de Halo con 16 Micro-Puntos Orbitales ──────────────────
+# ── Renderizador de Halo con 14 Micro-Puntos Orbitales ──────────────────
 class IndustrialHaloCore:
-    def __init__(self, canvas, cx=36, cy=38):
+    def __init__(self, canvas, cx=38, cy=40):
         self.canvas = canvas
         self.cx = cx
         self.cy = cy
@@ -322,12 +320,11 @@ class IndustrialHaloCore:
         self.canvas.coords(self.id_core_body, cx - core_r, cy - core_r, cx + core_r, cy + core_r)
         self.canvas.coords(self.id_core_center, cx - center_r, cy - center_r, cx + center_r, cy + center_r)
 
-        # Color reactivo del centro (Cian en calma, Ámbar en esfuerzo)
+        # Color reactivo del centro
         center_col = HUD_PALETTE["crt_green"] if bpm < 95 else HUD_PALETTE["amber_alert"]
         self.canvas.itemconfig(self.id_core_center, fill=center_col)
 
-        # Rotación lineal de partículas según BPM
-        # 60 BPM -> 90 deg/s | 120 BPM -> 240 deg/s
+        # Rotación de partículas según BPM
         rot_speed = (self.bpm / 60.0) * 120.0
         base_angle = (t_now * rot_speed) % 360.0
         orbit_r = 24.0
@@ -337,12 +334,11 @@ class IndustrialHaloCore:
             rad = math.radians(angle)
             px = cx + math.cos(rad) * orbit_r
             py = cy + math.sin(rad) * orbit_r
-            # Micro-puntos
             p_size = 1.2 if (i % 2 == 0) else 1.8
             self.canvas.coords(p_id, px - p_size, py - p_size, px + p_size, py + p_size)
 
 
-# ── Aplicación Compacta 320x180 px: Cyber Telemetry HUD ─────────────────
+# ── Aplicación Compacta 320x195 px: Cyber Telemetry HUD ─────────────────
 class CyberTelemetryHUD(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -352,9 +348,9 @@ class CyberTelemetryHUD(ctk.CTk):
         self.attributes("-topmost", True)
         self.configure(fg_color=HUD_PALETTE["bg_base"])
 
-        # Dimensiones Exactas del Concepto (320 x 180 px)
+        # Dimensiones Exactas Optimizadas (320 x 195 px)
         self.hud_w = 320
-        self.hud_h = 180
+        self.hud_h = 195
         screen_w = self.winfo_screenwidth()
         pos_x = screen_w - self.hud_w - 20
         pos_y = 60
@@ -383,17 +379,13 @@ class CyberTelemetryHUD(ctk.CTk):
         }
 
         # Motores Gráficos y Sintetizador ECG
-        self.ecg_engine = SyntheticECGGenerator(buffer_len=150)
-
-        # Ticker de Texto / Marquee Diagnóstico
-        self.ticker_text = "[ALERT: SEDENTARY_RECOVERY_LOW] FC Basal: 58 BPM (-8) | Time: 59m static | BLE_CH1: 0x0013 [0xE5] | LATENCY: 8ms | SPO2: 98% "
-        self.ticker_offset = 0
+        self.ecg_engine = SyntheticECGGenerator(buffer_len=140)
 
         # Construir Interfaz
         self.setup_ui()
 
         # Núcleo Halo
-        self.halo_core = IndustrialHaloCore(self.canvas_halo, cx=36, cy=38)
+        self.halo_core = IndustrialHaloCore(self.canvas_halo, cx=38, cy=40)
 
         # Iniciar Worker BLE
         self.ble_worker = BLETelemetryBridge(self.data_queue, self.cmd_queue)
@@ -403,7 +395,7 @@ class CyberTelemetryHUD(ctk.CTk):
         self.last_loop_time = time.perf_counter()
         self.after(16, self.render_60fps_loop)
         self.after(60, self.process_telemetry_queue)
-        self.after(1000, self.update_sedentary_clock)
+        self.after(1000, self.update_sedentary_and_diagnostics)
 
     def start_drag(self, event):
         self._drag_x = event.x
@@ -418,11 +410,11 @@ class CyberTelemetryHUD(ctk.CTk):
         self.destroy()
         sys.exit(0)
 
-    # ── Generación de Bloques LED Segmentados Estilo VST [█ █ █ ░ ░] ─────
-    def get_led_bar_str(self, pct, total_blocks=10):
-        filled = int((pct / 100.0) * total_blocks)
+    # ── Generador de Bloques LED Segmentados Estilo VST [■ ■ ■ □ □] ─────
+    def get_led_bar_str(self, pct, total_blocks=5):
+        filled = int(round((pct / 100.0) * total_blocks))
         filled = max(0, min(total_blocks, filled))
-        return "█" * filled + "░" * (total_blocks - filled)
+        return "■" * filled + "□" * (total_blocks - filled)
 
     def setup_ui(self):
         # Marco Principal Contenedor con Borde Técnico
@@ -430,12 +422,12 @@ class CyberTelemetryHUD(ctk.CTk):
                                       border_width=1, border_color=HUD_PALETTE["border_normal"])
         self.container.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # ── 1. Header Técnico (0x1DBC [RAW 0xE5] 104 BPM [████░░] 16% BAT) ──
+        # ── 1. Header Técnico (0x1DBC [RAW 0xE5] 72 BPM [■■□□□] 16% [x]) ──
         self.header = ctk.CTkFrame(self.container, fg_color="transparent", height=24)
-        self.header.pack(fill="x", padx=8, pady=(5, 2))
+        self.header.pack(fill="x", padx=10, pady=(6, 2))
 
         # ID y Comando RAW
-        self.lbl_id = ctk.CTkLabel(self.header, text="0x1DBC", font=("Consolas", 9, "bold"),
+        self.lbl_id = ctk.CTkLabel(self.header, text="0x1DBC", font=("Consolas", 10, "bold"),
                                    text_color=HUD_PALETTE["crt_cyan"])
         self.lbl_id.pack(side="left")
 
@@ -451,26 +443,26 @@ class CyberTelemetryHUD(ctk.CTk):
         # Botón Cerrar Discreto
         self.btn_close = ctk.CTkButton(self.header, text="x", width=14, height=14, corner_radius=2,
                                        fg_color="transparent", hover_color=HUD_PALETTE["bg_card"],
-                                       text_color=HUD_PALETTE["text_sub"], font=("Consolas", 8),
+                                       text_color=HUD_PALETTE["text_sub"], font=("Consolas", 9),
                                        command=self.close_hud)
-        self.btn_close.pack(side="right")
+        self.btn_close.pack(side="right", padx=(4, 0))
 
-        # Batería Segmentada en Bloques VST
-        bat_blocks = self.get_led_bar_str(self.telemetry["battery"], 6)
+        # Batería Segmentada en Bloques VST Nítidos
+        bat_blocks = self.get_led_bar_str(self.telemetry["battery"], 5)
         self.lbl_bat_vst = ctk.CTkLabel(self.header, text=f"{bat_blocks} {self.telemetry['battery']}%",
-                                       font=("Consolas", 8, "bold"), text_color=HUD_PALETTE["text_sub"])
-        self.lbl_bat_vst.pack(side="right", padx=(0, 4))
+                                       font=("Consolas", 9, "bold"), text_color=HUD_PALETTE["text_sub"])
+        self.lbl_bat_vst.pack(side="right", padx=(0, 2))
 
         # Divisor Superior Fino
         self.div_top = ctk.CTkFrame(self.container, fg_color=HUD_PALETTE["border_normal"], height=1)
-        self.div_top.pack(fill="x", padx=6, pady=(1, 3))
+        self.div_top.pack(fill="x", padx=8, pady=(2, 3))
 
         # ── 2. Módulo Visual Center (Halo Core + Canvas ECG Waveform) ──
-        self.center_frame = ctk.CTkFrame(self.container, fg_color="transparent", height=90)
-        self.center_frame.pack(fill="x", padx=8, pady=1)
+        self.center_frame = ctk.CTkFrame(self.container, fg_color="transparent", height=86)
+        self.center_frame.pack(fill="x", padx=8, pady=0)
 
         # Canvas Halo Core (Izquierda)
-        self.canvas_halo = tk.Canvas(self.center_frame, width=74, height=76,
+        self.canvas_halo = tk.Canvas(self.center_frame, width=76, height=80,
                                      bg=HUD_PALETTE["bg_base"], highlightthickness=0)
         self.canvas_halo.pack(side="left", padx=(0, 4))
 
@@ -482,10 +474,10 @@ class CyberTelemetryHUD(ctk.CTk):
         self.canvas_ecg = tk.Canvas(self.right_col, width=220, height=54,
                                     bg=HUD_PALETTE["bg_card"], highlightthickness=1,
                                     highlightbackground=HUD_PALETTE["border_normal"])
-        self.canvas_ecg.pack(fill="x", pady=(0, 2))
+        self.canvas_ecg.pack(fill="x", pady=(0, 3))
 
-        # Subtítulo Técnico: [ 72 lpm ] ---> TARGET: 104 BPM (SYNC)
-        self.sync_row = ctk.CTkFrame(self.right_col, fg_color="transparent", height=16)
+        # Subtítulo Técnico: HALO REACT [ 72 lpm ] -> Target: 72 BPM  [ANTISPAM]
+        self.sync_row = ctk.CTkFrame(self.right_col, fg_color="transparent", height=18)
         self.sync_row.pack(fill="x")
 
         self.lbl_sync_status = ctk.CTkLabel(self.sync_row, text="HALO REACT [ 72 lpm ] -> Target: 72 BPM",
@@ -494,25 +486,37 @@ class CyberTelemetryHUD(ctk.CTk):
 
         # Insignia de Antispam / Supresión
         self.lbl_antispam = ctk.CTkLabel(self.sync_row, text="[ANTISPAM]", font=("Consolas", 7, "bold"),
-                                         text_color=HUD_PALETTE["text_raw"])
+                                         text_color=HUD_PALETTE["crt_green"])
         self.lbl_antispam.pack(side="right")
 
         # Divisor Inferior Fino
         self.div_bot = ctk.CTkFrame(self.container, fg_color=HUD_PALETTE["border_normal"], height=1)
-        self.div_bot.pack(fill="x", padx=6, pady=(3, 2))
+        self.div_bot.pack(fill="x", padx=8, pady=(4, 4))
 
-        # ── 3. Ticker de Texto / Marquee Diagnóstico (Zero-Coach) ──
-        self.ticker_frame = ctk.CTkFrame(self.container, fg_color=HUD_PALETTE["bg_card"], corner_radius=4,
-                                         border_width=1, border_color=HUD_PALETTE["border_normal"], height=22)
-        self.ticker_frame.pack(fill="x", padx=8, pady=(1, 5))
+        # ── 3. Consola Terminal Diagnóstica Estructurada (Zero-Corte, 100% Nítida) ──
+        self.diag_frame = ctk.CTkFrame(self.container, fg_color=HUD_PALETTE["bg_card"], corner_radius=5,
+                                       border_width=1, border_color=HUD_PALETTE["border_normal"])
+        self.diag_frame.pack(fill="x", padx=8, pady=(0, 6))
 
-        self.canvas_ticker = tk.Canvas(self.ticker_frame, width=300, height=18,
-                                       bg=HUD_PALETTE["bg_card"], highlightthickness=0)
-        self.canvas_ticker.pack(fill="both", expand=True, padx=4, pady=1)
+        # Línea 1: Diagnóstico Fisiológico / Alerta Inmediata
+        self.lbl_diag_line1 = ctk.CTkLabel(
+            self.diag_frame,
+            text="⚠ ALERT: SEDENTARY_HIGH (59m) · FC Basal -8 BPM",
+            font=("Consolas", 8, "bold"),
+            text_color=HUD_PALETTE["amber_alert"],
+            anchor="w"
+        )
+        self.lbl_diag_line1.pack(fill="x", padx=8, pady=(3, 1))
 
-        self.ticker_text_id = self.canvas_ticker.create_text(300, 9, text=self.ticker_text,
-                                                             font=("Consolas", 8), fill=HUD_PALETTE["amber_alert"],
-                                                             anchor="w")
+        # Línea 2: Pipeline BLE RAW & Telemetría
+        self.lbl_diag_line2 = ctk.CTkLabel(
+            self.diag_frame,
+            text="BLE: 0x0013 [0xE5] | LATENCY: 8ms | SPO2: 98% | OK",
+            font=("Consolas", 8),
+            text_color=HUD_PALETTE["text_sub"],
+            anchor="w"
+        )
+        self.lbl_diag_line2.pack(fill="x", padx=8, pady=(0, 3))
 
     # ── Renderizado del Osciloscopio ECG a 60 FPS ──
     def draw_ecg_oscilloscope(self, buffer):
@@ -532,7 +536,6 @@ class CyberTelemetryHUD(ctk.CTk):
         coords = []
         for i, val in enumerate(buffer):
             x = i * step
-            # Escalar amplitud: pico R llega hasta el 85% de la altura
             y = mid_y - (val * (mid_y - 6))
             coords.append((x, y))
 
@@ -555,7 +558,7 @@ class CyberTelemetryHUD(ctk.CTk):
         ecg_buf, curr_bpm = self.ecg_engine.step(dt)
         self.draw_ecg_oscilloscope(ecg_buf)
 
-        # 2. Actualizar Halo Core con 16 Partículas
+        # 2. Actualizar Halo Core con 14 Partículas
         latest_ecg = ecg_buf[-1]
         self.halo_core.update(t_now, curr_bpm, latest_ecg)
 
@@ -564,14 +567,6 @@ class CyberTelemetryHUD(ctk.CTk):
             self.container.configure(border_color=HUD_PALETTE["border_flash"])
         else:
             self.container.configure(border_color=HUD_PALETTE["border_normal"])
-
-        # 4. Desplazamiento del Ticker / Marquee Horizontal
-        self.ticker_offset -= 1.2
-        self.canvas_ticker.coords(self.ticker_text_id, self.ticker_offset, 9)
-        # Reiniciar si sale de pantalla
-        bbox = self.canvas_ticker.bbox(self.ticker_text_id)
-        if bbox and bbox[2] < 0:
-            self.ticker_offset = 310
 
         self.after(16, self.render_60fps_loop)
 
@@ -596,13 +591,13 @@ class CyberTelemetryHUD(ctk.CTk):
                     self.lbl_bpm_head.configure(text=f"{bpm} BPM")
                     self.lbl_raw.configure(text=f" [RAW {raw}]")
                     self.lbl_sync_status.configure(
-                        text=f"HALO REACT [ {int(self.ecg_engine.current_bpm)} lpm ] -> Target: {bpm} BPM (SYNC)"
+                        text=f"HALO REACT [ {int(self.ecg_engine.current_bpm)} lpm ] -> Target: {bpm} BPM"
                     )
 
                 elif p_type == "battery":
                     pct = pkt.get("value")
                     self.telemetry["battery"] = pct
-                    blocks = self.get_led_bar_str(pct, 6)
+                    blocks = self.get_led_bar_str(pct, 5)
                     self.lbl_bat_vst.configure(text=f"{blocks} {pct}%")
 
                 elif p_type == "antispam":
@@ -617,20 +612,31 @@ class CyberTelemetryHUD(ctk.CTk):
 
         self.after(60, self.process_telemetry_queue)
 
-    # ── Actualización de Diagnóstico del Ticker ──
-    def update_sedentary_clock(self):
+    # ── Actualización de Diagnóstico Terminal ──
+    def update_sedentary_and_diagnostics(self):
         self.telemetry["sedentary_seconds"] += 1
         mins = self.telemetry["sedentary_seconds"] // 60
 
-        # Ticker con formato de ingeniería estricto
+        # Diagnóstico claro, sin texto cortado
         if mins >= 45:
-            self.ticker_text = f"[ALERT: SEDENTARY_RECOVERY_LOW] FC Basal: 58 BPM (-8) | Time: {mins}m static | BLE: 0x0013 [0xE5] | LATENCY: 8ms | PIPELINE: OK "
-            self.canvas_ticker.itemconfig(self.ticker_text_id, text=self.ticker_text, fill=HUD_PALETTE["amber_alert"])
+            self.lbl_diag_line1.configure(
+                text=f"⚠ ALERT: SEDENTARY_HIGH ({mins}m) · FC Basal -8 BPM",
+                text_color=HUD_PALETTE["amber_alert"]
+            )
+            self.diag_frame.configure(border_color=HUD_PALETTE["amber_alert"])
         else:
-            self.ticker_text = f"[DIAGNOSTIC_NORMAL] FC: {self.telemetry['target_bpm']} BPM | Time: {mins}m | BLE: 0x0013 | SPO2: {self.telemetry['spo2']}% | ALL_SYSTEMS_GO "
-            self.canvas_ticker.itemconfig(self.ticker_text_id, text=self.ticker_text, fill=HUD_PALETTE["crt_green"])
+            self.lbl_diag_line1.configure(
+                text=f"✔ PIPELINE_OK · Sistema en Equilibrio · FC: {self.telemetry['target_bpm']} BPM",
+                text_color=HUD_PALETTE["crt_green"]
+            )
+            self.diag_frame.configure(border_color=HUD_PALETTE["border_normal"])
 
-        self.after(1000, self.update_sedentary_clock)
+        self.lbl_diag_line2.configure(
+            text=f"BLE: 0x0013 [{self.telemetry['last_raw_cmd']}] | LATENCY: 8ms | SPO2: {self.telemetry['spo2']}% | OK",
+            text_color=HUD_PALETTE["text_sub"]
+        )
+
+        self.after(1000, self.update_sedentary_and_diagnostics)
 
 
 if __name__ == "__main__":
