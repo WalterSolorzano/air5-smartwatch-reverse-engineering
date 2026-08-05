@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.venv/
+
+# Large Android Bugreports & Dumps
+bugreport/
+*.zip
+*.log
+!btsnoop_hci_clean.log
+
+# Sync Output (User personal data)
+sync_data/

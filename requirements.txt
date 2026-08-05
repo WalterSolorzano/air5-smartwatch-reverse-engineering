@@ -1,0 +1,5 @@
+customtkinter>=5.2.0
+winrt-Windows.Devices.Bluetooth>=2.0.0
+winrt-Windows.Storage.Streams>=2.0.0
+winrt-Windows.Foundation>=2.0.0
+Pillow>=9.0.0
