@@ -1,10 +1,10 @@
 """
-CYBER-TELEMETRY HUD — 300 Millisecond Glanceable Edition (310x170 px)
-Diseño basado en percepción periférica y cero lectura de texto:
-- Número HERO gigante (30pt bold) para el pulso cardíaco.
-- Iconografía pura de instrumentación: ⏱ 59m | 🫁 98% | 👟 2.9k | ⚡ 16% | 🛡
-- Código cromático dinámico: Cambio automático de Cyan/Verde a Ámbar (+45m) y micro-glitch (+60m).
-- Efecto Flatline rojo en desconexión y cuadrícula militar con parallax en movimiento.
+CYBER-TELEMETRY HUD — WOW Physics & Telemetry Edition (310x175 px)
+Motor de Física Dinámica y Telemetría Fisiológica en Tiempo Real:
+- Modo 0: Reactor Cuántico con Campo Vectorial y Ondas de Choque Radiales en cada latido.
+- Modo 1: Stickman Ragdoll Físico con gravedad, estado dormido/sedentario y rebote elástico por pasos/acelerómetro.
+- Modo 2: Cyber-Engine Mecánico 2.5D con pistones en expansión sistólica.
+(Haz clic en el núcleo izquierdo para cambiar de modo al vuelo)
 """
 import sys
 import os
@@ -18,13 +18,11 @@ from datetime import datetime
 import tkinter as tk
 import customtkinter as ctk
 
-# ── Configuración Base CustomTkinter ─────────────────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 MAC_ADDR = "81:0A:B7:00:1D:BC"
 
-# Paleta de Alto Impacto Periférico
 PALETTE = {
     "bg_base": "#0A0D10",
     "bg_card": "#0F141A",
@@ -70,7 +68,7 @@ class BLETelemetryBridge(threading.Thread):
             )
             from winrt.windows.storage.streams import DataWriter, DataReader
         except ImportError:
-            self.data_queue.put({"type": "status", "status": "sim", "msg": "NO_WINRT"})
+            self.data_queue.put({"type": "status", "status": "sim"})
             return
 
         mac_int = int(self.mac_addr.replace(":", ""), 16)
@@ -130,11 +128,10 @@ class BLETelemetryBridge(threading.Thread):
                     elif cmd == 0x26 and len(data) >= 9:
                         steps = struct.unpack_from("<H", data, 3)[0]
                         calories = struct.unpack_from("<H", data, 5)[0]
-                        distance = struct.unpack_from("<H", data, 7)[0]
                         if steps != 65535:
                             self.data_queue.put({"type": "activity", "steps": steps, "cal": calories, "t": t_rx})
 
-                    # Incremento instantáneo (B1)
+                    # Incremento instantáneo / Acelerómetro (B1)
                     elif cmd == 0xB1:
                         self.data_queue.put({"type": "step_inc", "t": t_rx})
 
@@ -174,7 +171,7 @@ class BLETelemetryBridge(threading.Thread):
                 if write2:
                     await send_cmd(write2, "00f4000000000000000000000000000000000402")
 
-                # Antispam sedentarismo
+                # Antispam
                 await send_cmd(write1, "d1ff64")
                 await send_cmd(write1, "d7160017000000")
                 self.data_queue.put({"type": "antispam", "msg": "ACTIVE"})
@@ -216,9 +213,9 @@ class BLETelemetryBridge(threading.Thread):
                 await asyncio.sleep(4)
 
 
-# ── Motor ECG Fisiológico con Soporte de Flatline & Parallax ─────────────
+# ── Motor ECG Fisiológico ───────────────────────────────────────────────
 class SyntheticECGGenerator:
-    def __init__(self, buffer_len=130):
+    def __init__(self, buffer_len=125):
         self.buffer_len = buffer_len
         self.buffer = [0.0] * buffer_len
         self.current_bpm = 72.0
@@ -245,19 +242,16 @@ class SyntheticECGGenerator:
         else: return 0.0
 
     def step(self, dt, walking_speed=0.0):
-        # Transición suave de BPM
         self.current_bpm += (self.target_bpm - self.current_bpm) * 0.06
         freq = self.current_bpm / 60.0
         self.phase = (self.phase + (freq * dt)) % 1.0
 
-        # Parallax del fondo de la cuadrícula si está caminando
         self.parallax_offset = (self.parallax_offset + (walking_speed * dt * 40.0)) % 20.0
 
-        # Detección de Flatline (>10s sin paquetes BLE)
         time_since_pkt = time.perf_counter() - self.last_packet_time
         if time_since_pkt > 10.0:
             self.is_flatline = True
-            val = (random.random() - 0.5) * 0.04  # Ruido basal plano
+            val = (random.random() - 0.5) * 0.04
         else:
             self.is_flatline = False
             noise = (random.random() - 0.5) * 0.02
@@ -268,83 +262,211 @@ class SyntheticECGGenerator:
         return self.buffer, self.current_bpm, self.is_flatline
 
 
-# ── Halo Reactor Orgánico Calmado (16s por revolución) ───────────────────
-class IndustrialHaloCore:
-    def __init__(self, canvas, cx=32, cy=32):
+# ── Motor Físico #1: Reactor Cuántico Vectorial con Ondas de Choque ─────
+class QuantumVectorReactor:
+    def __init__(self, canvas, w=72, h=52):
         self.canvas = canvas
-        self.cx = cx
-        self.cy = cy
-        self.num_particles = 10
+        self.w, self.h = w, h
+        self.cx, self.cy = w / 2.0, h / 2.0
+        self.num_p = 24
 
-        self.id_base_track = canvas.create_oval(cx-24, cy-24, cx+24, cy+24, outline="#16202A", width=1.5)
-        self.id_core_body = canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill="#0F171F", outline=PALETTE["crt_cyan"], width=1.5)
-        self.id_core_center = canvas.create_oval(cx-5, cy-5, cx+5, cy+5, fill=PALETTE["crt_green"], outline="")
+        self.particles = []
+        for _ in range(self.num_p):
+            ang = random.uniform(0, math.pi * 2)
+            dist = random.uniform(8, 22)
+            p = {
+                "x": self.cx + math.cos(ang) * dist,
+                "y": self.cy + math.sin(ang) * dist,
+                "vx": (random.random() - 0.5) * 0.4,
+                "vy": (random.random() - 0.5) * 0.4,
+                "size": random.uniform(1.0, 1.8),
+                "id": canvas.create_oval(0, 0, 0, 0, fill=PALETTE["crt_cyan"], outline="")
+            }
+            self.particles.append(p)
 
-        self.particles = [canvas.create_oval(0, 0, 0, 0, fill=PALETTE["crt_cyan"], outline="") for _ in range(self.num_particles)]
+        self.core_body = canvas.create_oval(0, 0, 0, 0, fill="#0F171F", outline=PALETTE["crt_cyan"], width=1)
+        self.core_dot = canvas.create_oval(0, 0, 0, 0, fill=PALETTE["crt_green"], outline="")
 
-    def update(self, t_now, bpm, ecg_val, is_flatline, sedentary_mins):
+    def trigger_shockwave(self, intensity=6.0):
+        for p in self.particles:
+            dx = p["x"] - self.cx
+            dy = p["y"] - self.cy
+            dist = math.hypot(dx, dy) + 0.1
+            p["vx"] += (dx / dist) * intensity * random.uniform(0.8, 1.2)
+            p["vy"] += (dy / dist) * intensity * random.uniform(0.8, 1.2)
+
+    def trigger_shake_impulse(self, dir_x=8.0):
+        for p in self.particles:
+            p["vx"] += dir_x * random.uniform(0.6, 1.4)
+            p["vy"] += (random.random() - 0.5) * 6.0
+
+    def update(self, dt, bpm, ecg_val, sedentary_mins, is_flatline):
         cx, cy = self.cx, self.cy
 
-        if is_flatline:
-            # Atenuación en Flatline
-            self.canvas.itemconfig(self.id_core_body, outline=PALETTE["border_normal"])
-            self.canvas.itemconfig(self.id_core_center, fill=PALETTE["red_alarm"])
-            core_r, center_r = 11.0, 4.0
-        else:
-            # Color por tiempo de sedentarismo
-            if sedentary_mins >= 45:
-                accent_col = PALETTE["amber"]
-            else:
-                accent_col = PALETTE["crt_green"] if bpm < 95 else PALETTE["amber"]
+        # Expansión central
+        expansion = max(0.0, ecg_val) * 4.0
+        cr = 9.0 + expansion
+        dr = 3.5 + (expansion * 0.5)
 
-            self.canvas.itemconfig(self.id_core_body, outline=PALETTE["crt_cyan"])
-            self.canvas.itemconfig(self.id_core_center, fill=accent_col)
+        col_core = PALETTE["amber"] if sedentary_mins >= 45 else PALETTE["crt_green"]
+        if is_flatline: col_core = PALETTE["red_alarm"]
 
-            expansion = max(0.0, ecg_val) * 3.5
-            core_r = 11.5 + expansion
-            center_r = 4.5 + (expansion * 0.5)
+        self.canvas.coords(self.core_body, cx - cr, cy - cr, cx + cr, cy + cr)
+        self.canvas.coords(self.core_dot, cx - dr, cy - dr, cx + dr, cy + dr)
+        self.canvas.itemconfig(self.core_dot, fill=col_core)
 
-        self.canvas.coords(self.id_core_body, cx - core_r, cy - core_r, cx + core_r, cy + core_r)
-        self.canvas.coords(self.id_core_center, cx - center_r, cy - center_r, cx + center_r, cy + center_r)
+        # Gravedad según sedentarismo: si >45m caen hacia abajo
+        gravity = 1.2 if sedentary_mins >= 45 else 0.0
 
-        # Rotación calmada: 20 deg/s
-        base_angle = (t_now * 20.0) % 360.0
-        orbit_r = 20.0
-        for i, p_id in enumerate(self.particles):
-            angle = base_angle + (i * (360.0 / self.num_particles))
-            rad = math.radians(angle)
-            px = cx + math.cos(rad) * orbit_r
-            py = cy + math.sin(rad) * orbit_r
-            self.canvas.coords(p_id, px - 1.2, py - 1.2, px + 1.2, py + 1.2)
+        for p in self.particles:
+            # Fuerza de atracción hacia el centro
+            dx = cx - p["x"]
+            dy = cy - p["y"]
+            dist = math.hypot(dx, dy) + 0.1
+            f_pull = min(4.0, 18.0 / dist)
+
+            p["vx"] += (dx / dist) * f_pull * dt * 30.0
+            p["vy"] += ((dy / dist) * f_pull + gravity) * dt * 30.0
+
+            # Fricción
+            p["vx"] *= 0.94
+            p["vy"] *= 0.94
+
+            p["x"] += p["vx"]
+            p["y"] += p["vy"]
+
+            # Rebote elástico en bordes del canvas
+            margin = 3
+            if p["x"] < margin: p["x"] = margin; p["vx"] *= -0.7
+            elif p["x"] > self.w - margin: p["x"] = self.w - margin; p["vx"] *= -0.7
+            if p["y"] < margin: p["y"] = margin; p["vy"] *= -0.7
+            elif p["y"] > self.h - margin: p["y"] = self.h - margin; p["vy"] *= -0.7
+
+            s = p["size"]
+            self.canvas.coords(p["id"], p["x"] - s, p["y"] - s, p["x"] + s, p["y"] + s)
+
+    def hide(self):
+        self.canvas.coords(self.core_body, -100, -100, -100, -100)
+        self.canvas.coords(self.core_dot, -100, -100, -100, -100)
+        for p in self.particles:
+            self.canvas.coords(p["id"], -100, -100, -100, -100)
 
 
-# ── Aplicación Principal 300ms Glanceable HUD (310 x 170 px) ────────────
-class GlanceableCyberHUD(ctk.CTk):
+# ── Motor Físico #2: Stickman Ragdoll Físico con Gravedad & Rebotes ─────
+class PhysicsRagdollStickman:
+    def __init__(self, canvas, w=72, h=52):
+        self.canvas = canvas
+        self.w, self.h = w, h
+        self.x = w / 2.0
+        self.y = h - 10
+        self.vx = 0.0
+        self.vy = 0.0
+        self.anim_t = 0.0
+
+        # Partes del cuerpo
+        self.id_head = canvas.create_oval(0, 0, 0, 0, fill=PALETTE["crt_green"], outline="")
+        self.id_body = canvas.create_line(0, 0, 0, 0, fill=PALETTE["crt_green"], width=1.5)
+        self.id_arm_l = canvas.create_line(0, 0, 0, 0, fill=PALETTE["crt_green"], width=1.5)
+        self.id_arm_r = canvas.create_line(0, 0, 0, 0, fill=PALETTE["crt_green"], width=1.5)
+        self.id_leg_l = canvas.create_line(0, 0, 0, 0, fill=PALETTE["crt_green"], width=1.5)
+        self.id_leg_r = canvas.create_line(0, 0, 0, 0, fill=PALETTE["crt_green"], width=1.5)
+        self.id_zzz = canvas.create_text(-100, -100, text="z Z", fill=PALETTE["amber"], font=("Consolas", 8, "bold"))
+
+    def trigger_step_jump(self):
+        self.vy = -7.5
+        self.vx = random.choice([-2.0, 2.0])
+
+    def trigger_slam_shake(self):
+        self.vx = random.choice([-10.0, 10.0])
+        self.vy = -8.0
+
+    def update(self, dt, bpm, walking_speed, sedentary_mins):
+        self.anim_t += dt * (bpm / 60.0) * 8.0
+
+        # Físicas de gravedad y movimiento
+        self.vy += 16.0 * dt  # Gravedad
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.92
+
+        ground = self.h - 10
+        if self.y >= ground:
+            self.y = ground
+            self.vy = 0.0
+
+        # Rebotes contra las paredes del widget
+        if self.x < 10: self.x = 10; self.vx = abs(self.vx) * 0.75
+        elif self.x > self.w - 10: self.x = self.w - 10; self.vx = -abs(self.vx) * 0.75
+
+        color = PALETTE["amber"] if sedentary_mins >= 45 else PALETTE["crt_green"]
+        self.canvas.itemconfig(self.id_head, fill=color)
+        for item in [self.id_body, self.id_arm_l, self.id_arm_r, self.id_leg_l, self.id_leg_r]:
+            self.canvas.itemconfig(item, fill=color)
+
+        # ESTADO 1: Sedentario / Dormido (>45m y quieto)
+        if sedentary_mins >= 45 and walking_speed == 0.0 and self.y >= ground - 2:
+            # Stickman acostado / derretido en el suelo
+            hx, hy = self.x - 10, ground + 4
+            self.canvas.coords(self.id_head, hx - 3, hy - 3, hx + 3, hy + 3)
+            self.canvas.coords(self.id_body, hx + 3, hy, hx + 14, hy)
+            self.canvas.coords(self.id_arm_l, hx + 6, hy, hx + 10, hy - 4)
+            self.canvas.coords(self.id_arm_r, hx + 8, hy, hx + 12, hy + 2)
+            self.canvas.coords(self.id_leg_l, hx + 14, hy, hx + 20, hy + 2)
+            self.canvas.coords(self.id_leg_r, hx + 14, hy, hx + 18, hy)
+            # Animación Zzz
+            zzz_y = hy - 8 - math.sin(time.time() * 2.0) * 3
+            self.canvas.coords(self.id_zzz, hx - 2, zzz_y)
+            return
+
+        self.canvas.coords(self.id_zzz, -100, -100)
+
+        # ESTADO 2: Activo / Caminando / En el aire
+        x, y = self.x, self.y
+        head_r = 3.5
+        body_len = 12
+
+        # Cabeza y torso
+        self.canvas.coords(self.id_head, x - head_r, y - body_len - head_r, x + head_r, y - body_len + head_r)
+        self.canvas.coords(self.id_body, x, y - body_len, x, y)
+
+        # Piernas articuladas con marcha
+        leg_swing = math.sin(self.anim_t) * 7.0 if walking_speed > 0 or self.y < ground - 1 else 0.0
+        self.canvas.coords(self.id_leg_l, x, y, x - leg_swing, y + 8)
+        self.canvas.coords(self.id_leg_r, x, y, x + leg_swing, y + 8)
+
+        # Brazos balanceándose
+        arm_swing = math.cos(self.anim_t) * 6.0
+        self.canvas.coords(self.id_arm_l, x, y - body_len + 3, x - arm_swing, y - body_len + 9)
+        self.canvas.coords(self.id_arm_r, x, y - body_len + 3, x + arm_swing, y - body_len + 9)
+
+    def hide(self):
+        for item in [self.id_head, self.id_body, self.id_arm_l, self.id_arm_r, self.id_leg_l, self.id_leg_r, self.id_zzz]:
+            self.canvas.coords(item, -100, -100, -100, -100)
+
+
+# ── Aplicación Principal Glanceable HUD con Física WOW ──────────────────
+class PhysicsGlanceableHUD(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Ventana Superpuesta Sin Bordes de Windows
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(fg_color=PALETTE["bg_base"])
 
-        # Dimensiones Compactas (310 x 170 px)
+        # Dimensiones (310 x 175 px)
         self.hud_w = 310
-        self.hud_h = 170
+        self.hud_h = 175
         screen_w = self.winfo_screenwidth()
         pos_x = screen_w - self.hud_w - 20
         pos_y = 60
         self.geometry(f"{self.hud_w}x{self.hud_h}+{pos_x}+{pos_y}")
 
-        # Sistema de Arrastre
         self.bind("<ButtonPress-1>", self.start_drag)
         self.bind("<B1-Motion>", self.do_drag)
 
-        # Colas de Telemetría
         self.data_queue = queue.Queue()
         self.cmd_queue = queue.Queue()
 
-        # Telemetría
         self.telemetry = {
             "bpm": 72,
             "target_bpm": 72,
@@ -357,20 +479,21 @@ class GlanceableCyberHUD(ctk.CTk):
             "last_step_rx": 0.0
         }
 
-        # Motores Gráficos
+        # Modo Visual Interactivo: 0=Reactor Partículas Vectoriales, 1=Stickman Ragdoll
+        self.visual_mode = 0
+
         self.ecg_engine = SyntheticECGGenerator(buffer_len=125)
 
-        # Construir Interfaz Visual Pura
         self.setup_ui()
 
-        # Núcleo Halo
-        self.halo_core = IndustrialHaloCore(self.canvas_halo, cx=32, cy=32)
+        # Instanciar Motores Físicos
+        self.reactor = QuantumVectorReactor(self.canvas_hero, w=72, h=50)
+        self.stickman = PhysicsRagdollStickman(self.canvas_hero, w=72, h=50)
 
-        # Iniciar Worker BLE
+        # Iniciar BLE
         self.ble_worker = BLETelemetryBridge(self.data_queue, self.cmd_queue)
         self.ble_worker.start()
 
-        # Timers
         self.last_loop_time = time.perf_counter()
         self.after(16, self.render_60fps_loop)
         self.after(60, self.process_telemetry_queue)
@@ -385,17 +508,23 @@ class GlanceableCyberHUD(ctk.CTk):
         y = self.winfo_y() + (event.y - self._drag_y)
         self.geometry(f"+{x}+{y}")
 
+    def toggle_visual_mode(self, event=None):
+        self.visual_mode = (self.visual_mode + 1) % 2
+        if self.visual_mode == 0:
+            self.stickman.hide()
+        else:
+            self.reactor.hide()
+
     def close_hud(self):
         self.destroy()
         sys.exit(0)
 
     def setup_ui(self):
-        # Marco Principal Contenedor con Borde Técnico
         self.container = ctk.CTkFrame(self, fg_color=PALETTE["bg_base"], corner_radius=8,
                                       border_width=1, border_color=PALETTE["border_normal"])
         self.container.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # ── 1. Header Minimalista (0x1DBC · 🛡 · ⚡ 16% · [x]) ──
+        # ── 1. Header (0x1DBC · 🛡 · ⚡ 16% · [x]) ──
         self.header = ctk.CTkFrame(self.container, fg_color="transparent", height=22)
         self.header.pack(fill="x", padx=10, pady=(5, 1))
 
@@ -403,39 +532,36 @@ class GlanceableCyberHUD(ctk.CTk):
                                    text_color=PALETTE["crt_cyan"])
         self.lbl_id.pack(side="left")
 
-        # Micro-Escudo LED Antispam
         self.lbl_shield = ctk.CTkLabel(self.header, text=" 🛡", font=("Segoe UI", 10),
                                        text_color=PALETTE["crt_green"])
         self.lbl_shield.pack(side="left", padx=4)
 
-        # Botón Cerrar
         self.btn_close = ctk.CTkButton(self.header, text="x", width=14, height=14, corner_radius=2,
                                        fg_color="transparent", hover_color=PALETTE["bg_card"],
                                        text_color=PALETTE["text_sub"], font=("Segoe UI", 9),
                                        command=self.close_hud)
         self.btn_close.pack(side="right")
 
-        # Batería Símbolo + Porcentaje
         self.lbl_bat = ctk.CTkLabel(self.header, text=f"⚡ {self.telemetry['battery']}%",
                                     font=("Consolas", 10, "bold"), text_color=PALETTE["text_sub"])
         self.lbl_bat.pack(side="right", padx=(0, 6))
 
-        # Divisor Superior Fino
+        # Divisor Superior
         self.div_top = ctk.CTkFrame(self.container, fg_color=PALETTE["border_normal"], height=1)
         self.div_top.pack(fill="x", padx=8, pady=(2, 2))
 
-        # ── 2. Módulo Visual Hero (Número Gigante 30pt + Halo + ECG Waveform) ──
-        self.center_frame = ctk.CTkFrame(self.container, fg_color="transparent", height=82)
+        # ── 2. Módulo Visual Hero (Física Interactiva + Número HERO 30pt + ECG Oscilloscope) ──
+        self.center_frame = ctk.CTkFrame(self.container, fg_color="transparent", height=86)
         self.center_frame.pack(fill="x", padx=8, pady=0)
 
-        # Columna Izquierda: Halo Pequeño + Número HERO Gigante de 30pt
+        # Columna Izquierda Interactiva: Motor Físico (Haz clic para alternar) + Número HERO
         self.hero_col = ctk.CTkFrame(self.center_frame, fg_color="transparent", width=95)
         self.hero_col.pack(side="left", padx=(0, 4))
 
-        # Halo Reactor Compacto
-        self.canvas_halo = tk.Canvas(self.hero_col, width=64, height=48,
-                                     bg=PALETTE["bg_base"], highlightthickness=0)
-        self.canvas_halo.pack(side="top", pady=(0, 0))
+        self.canvas_hero = tk.Canvas(self.hero_col, width=74, height=52,
+                                     bg=PALETTE["bg_base"], highlightthickness=0, cursor="hand2")
+        self.canvas_hero.pack(side="top", pady=(0, 0))
+        self.canvas_hero.bind("<Button-1>", self.toggle_visual_mode)
 
         # NÚMERO HERO GIGANTE (30pt Bold)
         self.lbl_hero_bpm = ctk.CTkLabel(self.hero_col, text="72",
@@ -443,21 +569,20 @@ class GlanceableCyberHUD(ctk.CTk):
                                          text_color=PALETTE["crt_green"])
         self.lbl_hero_bpm.pack(side="top", pady=(0, 0))
 
-        # Columna Derecha: Canvas Osciloscopio ECG Grande y Nítido
-        self.canvas_ecg = tk.Canvas(self.center_frame, width=195, height=76,
+        # Canvas ECG Waveform Grande
+        self.canvas_ecg = tk.Canvas(self.center_frame, width=195, height=80,
                                     bg=PALETTE["bg_card"], highlightthickness=1,
                                     highlightbackground=PALETTE["border_normal"])
         self.canvas_ecg.pack(side="left", fill="both", expand=True)
 
-        # Divisor Inferior Fino
+        # Divisor Inferior
         self.div_bot = ctk.CTkFrame(self.container, fg_color=PALETTE["border_normal"], height=1)
         self.div_bot.pack(fill="x", padx=8, pady=(3, 3))
 
-        # ── 3. Fila de Instrumentación Pura (Iconos + Números Grandes, Cero Texto Explicativo) ──
+        # ── 3. Fila de Instrumentación Pura (Iconos + Números Grandes) ──
         self.pills_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         self.pills_frame.pack(fill="x", padx=8, pady=(0, 5))
 
-        # ⏱ Tiempo Sentado (Ámbar si >45m, Verde si activo)
         self.pill_time = ctk.CTkFrame(self.pills_frame, fg_color=PALETTE["bg_pill"],
                                       border_width=1, border_color=PALETTE["border_normal"],
                                       corner_radius=4, height=26)
@@ -467,7 +592,6 @@ class GlanceableCyberHUD(ctk.CTk):
                                      font=("Consolas", 11, "bold"), text_color=PALETTE["amber"])
         self.lbl_time.pack(padx=6, pady=2)
 
-        # 🫁 SpO2 Oxígeno (Cian)
         self.pill_spo2 = ctk.CTkFrame(self.pills_frame, fg_color=PALETTE["bg_pill"],
                                       border_width=1, border_color=PALETTE["border_normal"],
                                       corner_radius=4, height=26)
@@ -477,7 +601,6 @@ class GlanceableCyberHUD(ctk.CTk):
                                      font=("Consolas", 11, "bold"), text_color=PALETTE["crt_cyan"])
         self.lbl_spo2.pack(padx=6, pady=2)
 
-        # 👟 Pasos / Actividad (Blanco Nítido)
         self.pill_steps = ctk.CTkFrame(self.pills_frame, fg_color=PALETTE["bg_pill"],
                                        border_width=1, border_color=PALETTE["border_normal"],
                                        corner_radius=4, height=26)
@@ -487,14 +610,13 @@ class GlanceableCyberHUD(ctk.CTk):
                                       font=("Consolas", 11, "bold"), text_color=PALETTE["text_hero"])
         self.lbl_steps.pack(padx=6, pady=2)
 
-    # ── Renderizado del Osciloscopio con Parallax y Flatline ──
+    # ── Osciloscopio con Parallax y Flatline ──
     def draw_ecg_oscilloscope(self, buffer, is_flatline, parallax_off):
         self.canvas_ecg.delete("all")
         w = 195
-        h = 76
+        h = 80
         mid_y = h / 2.0
 
-        # Cuadrícula CRT con Parallax
         for gx in range(-20, w + 20, 20):
             x_line = gx + parallax_off
             self.canvas_ecg.create_line(x_line, 0, x_line, h, fill=PALETTE["ecg_grid"], width=1)
@@ -519,32 +641,36 @@ class GlanceableCyberHUD(ctk.CTk):
         cursor_col = PALETTE["red_alarm"] if is_flatline else "#FFFFFF"
         self.canvas_ecg.create_oval(lx - 2, ly - 2, lx + 2, ly + 2, fill=cursor_col, outline=PALETTE["crt_cyan"])
 
-    # ── Loop de Animación a 60 FPS ──
+    # ── Loop de Físicas y Renderizado a 60 FPS ──
     def render_60fps_loop(self):
         t_now = time.perf_counter()
         dt = t_now - self.last_loop_time
         self.last_loop_time = t_now
 
-        # 1. Motor ECG con Parallax y Detección de Flatline
+        # 1. Motor ECG
         ecg_buf, curr_bpm, is_flat = self.ecg_engine.step(dt, self.telemetry["walking_speed"])
         self.draw_ecg_oscilloscope(ecg_buf, is_flat, self.ecg_engine.parallax_offset)
 
-        # 2. Halo Core
+        # 2. Motores Físicos Interactivos
         mins_sed = self.telemetry["sedentary_seconds"] // 60
-        self.halo_core.update(t_now, curr_bpm, ecg_buf[-1], is_flat, mins_sed)
+        latest_ecg = ecg_buf[-1]
 
-        # 3. Color Dinámico del Número HERO
+        if self.visual_mode == 0:
+            self.reactor.update(dt, curr_bpm, latest_ecg, mins_sed, is_flat)
+        else:
+            self.stickman.update(dt, curr_bpm, self.telemetry["walking_speed"], mins_sed)
+
+        # 3. Número HERO Gigante
         if is_flat:
             self.lbl_hero_bpm.configure(text="--", text_color=PALETTE["red_alarm"])
         else:
             col = PALETTE["crt_green"] if curr_bpm < 95 else PALETTE["amber"]
             self.lbl_hero_bpm.configure(text=str(int(curr_bpm)), text_color=col)
 
-        # 4. Destello de Paquete BLE / Glitch Sedentario
+        # 4. Glitch / Destello Perimetral
         if t_now - self.telemetry["flash_edge_time"] < 0.12:
             self.container.configure(border_color=PALETTE["border_flash"])
         elif mins_sed >= 60:
-            # Micro-glitch de pulso ámbar/rojo a partir de 60m
             pulse = math.sin(t_now * 4.0)
             b_col = PALETTE["border_red"] if pulse > 0.3 else PALETTE["border_amber"]
             self.container.configure(border_color=b_col)
@@ -555,7 +681,7 @@ class GlanceableCyberHUD(ctk.CTk):
 
         self.after(16, self.render_60fps_loop)
 
-    # ── Loop de Telemetría BLE ──
+    # ── Telemetría BLE ──
     def process_telemetry_queue(self):
         try:
             while not self.data_queue.empty():
@@ -569,6 +695,9 @@ class GlanceableCyberHUD(ctk.CTk):
                     bpm = pkt.get("value")
                     self.telemetry["target_bpm"] = bpm
                     self.ecg_engine.set_target_bpm(bpm)
+                    # Disparar onda de choque radial en el reactor
+                    if self.visual_mode == 0:
+                        self.reactor.trigger_shockwave(intensity=7.0)
 
                 elif p_type == "battery":
                     pct = pkt.get("value")
@@ -592,17 +721,20 @@ class GlanceableCyberHUD(ctk.CTk):
                     self.telemetry["sedentary_seconds"] = 0
                     self.telemetry["walking_speed"] = 1.0
                     self.telemetry["last_step_rx"] = time.perf_counter()
+                    # Impulso físico de salto o ráfaga
+                    if self.visual_mode == 1:
+                        self.stickman.trigger_step_jump()
+                    elif self.visual_mode == 0:
+                        self.reactor.trigger_shake_impulse(dir_x=6.0)
 
         except queue.Empty:
             pass
 
-        # Desacelerar parallax tras 2s sin pasos
         if time.perf_counter() - self.telemetry["last_step_rx"] > 2.0:
             self.telemetry["walking_speed"] = 0.0
 
         self.after(60, self.process_telemetry_queue)
 
-    # ── Actualización de Estado de Sedentarismo (1 Hz) ──
     def update_sedentary_state(self):
         self.telemetry["sedentary_seconds"] += 1
         mins = self.telemetry["sedentary_seconds"] // 60
@@ -618,5 +750,5 @@ class GlanceableCyberHUD(ctk.CTk):
 
 
 if __name__ == "__main__":
-    app = GlanceableCyberHUD()
+    app = PhysicsGlanceableHUD()
     app.mainloop()
